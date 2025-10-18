@@ -4,7 +4,7 @@
  */
 /* tslint:disable */
 import {GoogleGenAI} from '@google/genai';
-import {CharacterClass} from '../characterClasses';
+import {CharacterClass, CHARACTER_CLASSES} from '../characterClasses';
 import {StoryMode} from '../types';
 
 const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
@@ -30,8 +30,19 @@ Your entire response must be a single, valid JSON array. Do not use markdown. Do
     "color": "(string) A hex color code like '#ffcdd2'",
     "description": "(string) A 1-2 sentence description of who this character is in the story",
     "startingHP": (number) Starting health points (60-100, based on character archetype),
+    "startingMana": (number) Starting mana points (50-100, based on character archetype),
     "attackType": "(string) What kind of combat/skills they use",
-    "specialAbility": "(string) A unique ability based on something they do in the story"
+    "baseDamage": (number) Base damage per attack (15-30),
+    "defense": (number) Defense rating (3-8),
+    "critChance": (number) Critical hit chance (0.10-0.35),
+    "specialAbility": {
+      "name": "(string) Ability name",
+      "description": "(string) What the ability does",
+      "manaCost": (number) Mana cost (25-40),
+      "baseDamage": (number, optional) Damage if it's a damage ability (30-50),
+      "healing": (number, optional) Healing if it's a heal ability (30-50),
+      "effects": (array of strings, optional) Special effects like ["stun", "burn", "guaranteed_crit", "heal"]
+    }
   }
 ]
 
@@ -51,8 +62,18 @@ Your entire response must be a single, valid JSON array. Do not use markdown. Do
     "color": "#e91e63",
     "description": "The passionate young heir of House Montague, skilled in swordplay and driven by love.",
     "startingHP": 80,
+    "startingMana": 60,
     "attackType": "Sword Fighting",
-    "specialAbility": "Passionate Strike"
+    "baseDamage": 22,
+    "defense": 6,
+    "critChance": 0.20,
+    "specialAbility": {
+      "name": "Passionate Strike",
+      "description": "A powerful strike fueled by emotion",
+      "manaCost": 30,
+      "baseDamage": 40,
+      "effects": ["guaranteed_crit"]
+    }
   },
   {
     "id": "juliet",
@@ -61,8 +82,18 @@ Your entire response must be a single, valid JSON array. Do not use markdown. Do
     "color": "#f48fb1",
     "description": "The intelligent daughter of House Capulet, clever and resourceful.",
     "startingHP": 75,
+    "startingMana": 80,
     "attackType": "Cunning & Deception",
-    "specialAbility": "Feigned Death"
+    "baseDamage": 18,
+    "defense": 5,
+    "critChance": 0.25,
+    "specialAbility": {
+      "name": "Feigned Death",
+      "description": "Appear to be defeated, then strike back with deadly precision",
+      "manaCost": 35,
+      "baseDamage": 45,
+      "effects": ["deception"]
+    }
   }
 ]
 
@@ -90,8 +121,19 @@ Your entire response must be a single, valid JSON array. Do not use markdown. Do
     "color": "(string) A hex color code like '#ffcdd2'",
     "description": "(string) A 1-2 sentence description of the class",
     "startingHP": (number) Starting health points (60-100, balanced across classes),
+    "startingMana": (number) Starting mana points (50-100, balanced across classes),
     "attackType": "(string) Type of attack (e.g., 'Energy Weapons', 'Hacking', 'Melee Combat')",
-    "specialAbility": "(string) Name of a unique special ability for this class"
+    "baseDamage": (number) Base damage per attack (15-30),
+    "defense": (number) Defense rating (3-8),
+    "critChance": (number) Critical hit chance (0.10-0.35),
+    "specialAbility": {
+      "name": "(string) Ability name",
+      "description": "(string) What the ability does",
+      "manaCost": (number) Mana cost (25-40),
+      "baseDamage": (number, optional) Damage if it's a damage ability (30-50),
+      "healing": (number, optional) Healing if it's a heal ability (30-50),
+      "effects": (array of strings, optional) Special effects like ["stun", "burn", "guaranteed_crit", "heal", "multi_hit"]
+    }
   }
 ]
 
@@ -115,8 +157,18 @@ For a sci-fi setting:
     "color": "#1e88e5",
     "description": "A heavily armored soldier trained in zero-gravity combat. High durability and firepower.",
     "startingHP": 100,
+    "startingMana": 50,
     "attackType": "Plasma Rifle",
-    "specialAbility": "Orbital Strike"
+    "baseDamage": 20,
+    "defense": 8,
+    "critChance": 0.15,
+    "specialAbility": {
+      "name": "Orbital Strike",
+      "description": "Call down devastating fire from orbit",
+      "manaCost": 30,
+      "baseDamage": 45,
+      "effects": ["area_damage"]
+    }
   },
   {
     "id": "cyber_hacker",
@@ -125,22 +177,18 @@ For a sci-fi setting:
     "color": "#00e676",
     "description": "A tech specialist who manipulates systems and machinery. Fragile but versatile.",
     "startingHP": 65,
+    "startingMana": 100,
     "attackType": "Digital Warfare",
-    "specialAbility": "System Override"
-  }
-]
-
-For a horror setting:
-[
-  {
-    "id": "occult_investigator",
-    "name": "Occult Investigator",
-    "icon": "🔍",
-    "color": "#8d6e63",
-    "description": "A researcher of dark mysteries with knowledge of forbidden rituals.",
-    "startingHP": 75,
-    "attackType": "Arcane Research",
-    "specialAbility": "Banishment Ritual"
+    "baseDamage": 28,
+    "defense": 3,
+    "critChance": 0.25,
+    "specialAbility": {
+      "name": "System Override",
+      "description": "Hack enemy systems to disable defenses",
+      "manaCost": 40,
+      "baseDamage": 50,
+      "effects": ["disable"]
+    }
   }
 ]
 
@@ -203,8 +251,16 @@ export async function generateCharacterClasses(
         !cls.color ||
         !cls.description ||
         !cls.startingHP ||
+        !cls.startingMana ||
         !cls.attackType ||
-        !cls.specialAbility
+        !cls.baseDamage ||
+        cls.defense === undefined ||
+        cls.critChance === undefined ||
+        !cls.specialAbility ||
+        typeof cls.specialAbility !== 'object' ||
+        !cls.specialAbility.name ||
+        !cls.specialAbility.description ||
+        !cls.specialAbility.manaCost
       ) {
         console.error('Generated class missing required fields, using defaults');
         return getDefaultClasses();
@@ -220,57 +276,6 @@ export async function generateCharacterClasses(
 }
 
 function getDefaultClasses(): CharacterClass[] {
-  return [
-    {
-      id: 'warrior',
-      name: 'Warrior',
-      icon: '⚔️',
-      color: '#ffcdd2',
-      description:
-        'A brave fighter skilled in melee combat. High strength and endurance.',
-      startingHP: 100,
-      attackType: 'Melee',
-      specialAbility: 'Shield Bash',
-    },
-    {
-      id: 'mage',
-      name: 'Mage',
-      icon: '🔮',
-      color: '#e1bee7',
-      description: 'A master of arcane arts. Powerful spells but fragile.',
-      startingHP: 60,
-      attackType: 'Magic',
-      specialAbility: 'Fireball',
-    },
-    {
-      id: 'thief',
-      name: 'Thief',
-      icon: '🗡️',
-      color: '#c5e1a5',
-      description: 'A nimble rogue skilled in stealth and quick strikes.',
-      startingHP: 75,
-      attackType: 'Ranged',
-      specialAbility: 'Shadow Strike',
-    },
-    {
-      id: 'cleric',
-      name: 'Cleric',
-      icon: '✨',
-      color: '#fff9c4',
-      description: 'A holy warrior who can heal and protect allies.',
-      startingHP: 85,
-      attackType: 'Divine',
-      specialAbility: 'Healing Light',
-    },
-    {
-      id: 'ranger',
-      name: 'Ranger',
-      icon: '🏹',
-      color: '#b2dfdb',
-      description: 'A skilled hunter who excels at ranged combat and tracking.',
-      startingHP: 80,
-      attackType: 'Ranged',
-      specialAbility: 'Arrow Volley',
-    },
-  ];
+  // Return the properly defined character classes from characterClasses.ts
+  return CHARACTER_CLASSES;
 }

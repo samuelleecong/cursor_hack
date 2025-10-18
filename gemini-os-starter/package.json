@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.7.0",
     "@fal-ai/serverless-client": "^0.15.0",
     "@google/genai": "^1.5.1",
     "@tailwindcss/browser": "^4.1.10",

@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CHARACTER_CLASSES, CharacterClass } from './characterClasses';
 import { AnimationOverlay } from './components/AnimationOverlay';
+import { AudioManager } from './components/AudioManager';
 import { BattleUI } from './components/BattleUI';
 import { CharacterSelection } from './components/CharacterSelection';
 import { ClassGenerationLoading } from './components/ClassGenerationLoading';
@@ -216,8 +217,9 @@ const App: React.FC = () => {
         level: newLevel,
         maxHP: newMaxHP,
         maxMana: newMaxMana,
-        currentHP: Math.min(prev.currentHP, newMaxHP),
-        currentMana: Math.min(prev.currentMana, newMaxMana),
+        // Fully restore HP and mana on level up
+        currentHP: leveledUp ? newMaxHP : Math.min(prev.currentHP, newMaxHP),
+        currentMana: leveledUp ? newMaxMana : Math.min(prev.currentMana, newMaxMana),
         experienceToNextLevel: calculateLevelUp(newLevel),
       };
     });
@@ -677,6 +679,8 @@ const App: React.FC = () => {
       ...prev,
       battleState: null,
       rooms: updatedRooms,
+      // Restore mana after battle (50% of max mana)
+      currentMana: Math.min(prev.maxMana, prev.currentMana + Math.floor(prev.maxMana * 0.5)),
     }));
   }, [gameState.battleState, gameState.rooms, gameState.currentRoomId]);
 
@@ -736,6 +740,7 @@ const App: React.FC = () => {
         animation={gameState.currentAnimation}
         onComplete={handleAnimationComplete}
       />
+      <AudioManager gameState={gameState} />
       <Window title="Roguelike Adventure">
         <div className="w-full h-full" style={{backgroundColor: '#1a1a2e'}}>
           {showStoryInput ? (
