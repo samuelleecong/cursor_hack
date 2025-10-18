@@ -10,17 +10,22 @@ import { generateCharacterSprite } from '../services/spriteGenerator';
 interface CharacterSelectionProps {
   characters: CharacterClass[];
   onSelectCharacter: (character: CharacterClass) => void;
+  isStartingGame?: boolean;
+  onLoadingStateChange?: (isLoading: boolean) => void;
 }
 
 export const CharacterSelection: React.FC<CharacterSelectionProps> = ({
   characters,
   onSelectCharacter,
+  isStartingGame = false,
+  onLoadingStateChange,
 }) => {
   const [enhancedCharacters, setEnhancedCharacters] = useState<CharacterClass[]>(characters);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const enhanceCharacters = async () => {
+      onLoadingStateChange?.(true);
       const enhanced = await Promise.all(
         characters.map(async (char) => {
           const sprite = await generateCharacterSprite(
@@ -37,12 +42,13 @@ export const CharacterSelection: React.FC<CharacterSelectionProps> = ({
       );
       setEnhancedCharacters(enhanced);
       setIsLoading(false);
+      onLoadingStateChange?.(false);
     };
 
     enhanceCharacters();
-  }, [characters]);
+  }, [characters, onLoadingStateChange]);
 
-  if (isLoading) {
+  if (isLoading || isStartingGame) {
     return (
       <div
         className="flex flex-col items-center justify-center min-h-full p-8"
@@ -54,7 +60,7 @@ export const CharacterSelection: React.FC<CharacterSelectionProps> = ({
         <div className="text-center">
           <div className="text-6xl mb-4 animate-pulse">⚔️</div>
           <p style={{ color: '#f4e8d0', fontSize: '18px' }}>
-            Generating character sprites...
+            {isStartingGame ? 'Starting your adventure...' : 'Generating character sprites...'}
           </p>
         </div>
       </div>

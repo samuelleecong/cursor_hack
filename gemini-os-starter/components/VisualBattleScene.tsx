@@ -7,6 +7,7 @@ import React, {useState, useEffect} from 'react';
 import {generateBattleScene, GeneratedImage} from '../services/falService';
 import {getCachedImage, cacheImage} from '../utils/imageCache';
 import {composeInteractionScene} from '../services/sceneComposer';
+import {SceneGenerationLoading} from './SceneGenerationLoading';
 
 export interface BattleSceneData {
   scene: string;
@@ -48,6 +49,7 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
     character?: string;
   }>({});
   const [generatingImages, setGeneratingImages] = useState(false);
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
 
   // Generate or load cached images when scene data changes
   useEffect(() => {
@@ -158,49 +160,33 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
     loadImages();
   }, [sceneData]);
 
-  if (isLoading || !sceneData) {
-    return (
-      <div
-        className="w-full h-full flex items-center justify-center"
-        style={{
-          backgroundColor: '#2d5a4e',
-          backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
-          fontFamily: 'monospace'
-        }}
-      >
-        <div className="text-center">
-          <div className="text-6xl mb-4 animate-pulse">⚙️</div>
-          <p style={{ color: '#f4e8d0', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px' }}>
-            Generating scene...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Delay showing loading screen to allow animation overlay to complete
+  useEffect(() => {
+    if (isLoading && !sceneData) {
+      // Wait 2.3 seconds for animation to complete (2s animation + 300ms fade)
+      const timer = setTimeout(() => {
+        setShowLoadingScreen(true);
+      }, 2300);
 
-  if (generatingImages) {
-    return (
-      <div
-        className="w-full h-full flex items-center justify-center"
-        style={{
-          backgroundColor: '#2d5a4e',
-          backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
-          fontFamily: 'monospace'
-        }}
-      >
-        <div className="text-center max-w-2xl px-8">
-          <div className="animate-pulse mb-6">
-            <div className="text-6xl mb-4">🎨</div>
-          </div>
-          <p style={{ color: '#f4e8d0', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px', marginBottom: '8px' }}>
-            Creating pixel art...
-          </p>
-          <p style={{ color: '#c9b896', fontSize: '14px' }}>
-            This may take 5-10 seconds
-          </p>
-        </div>
-      </div>
-    );
+      return () => clearTimeout(timer);
+    } else if (!isLoading) {
+      setShowLoadingScreen(false);
+    }
+  }, [isLoading, sceneData]);
+
+  // Determine loading stage
+  if ((showLoadingScreen || generatingImages || (!sceneData && !isLoading)) && !sceneData) {
+    let stage: 'processing' | 'generating' | 'creating_art' = 'generating';
+
+    if (generatingImages) {
+      stage = 'creating_art';
+    } else if (showLoadingScreen) {
+      stage = 'generating';
+    } else if (!sceneData) {
+      stage = 'processing';
+    }
+
+    return <SceneGenerationLoading stage={stage} />;
   }
 
   return (

@@ -9,6 +9,7 @@ import { AnimationOverlay } from './components/AnimationOverlay';
 import { AudioManager } from './components/AudioManager';
 import { CharacterSelection } from './components/CharacterSelection';
 import { ClassGenerationLoading } from './components/ClassGenerationLoading';
+import { RoomGenerationLoading } from './components/RoomGenerationLoading';
 import { GameCanvas } from './components/GameCanvas';
 import { GameHUD } from './components/GameHUD';
 import { StoryInput } from './components/StoryInput';
@@ -60,7 +61,11 @@ const App: React.FC = () => {
 
   const [showStoryInput, setShowStoryInput] = useState<boolean>(true);
   const [isGeneratingClasses, setIsGeneratingClasses] = useState<boolean>(false);
+  const [classGenerationStep, setClassGenerationStep] = useState<'analyzing' | 'world' | 'classes' | 'sprites' | 'complete'>('analyzing');
   const [availableClasses, setAvailableClasses] = useState<CharacterClass[]>(CHARACTER_CLASSES);
+  const [roomGenerationProgress, setRoomGenerationProgress] = useState<number>(0);
+  const [roomGenerationStep, setRoomGenerationStep] = useState<string>('Preparing room...');
+  const [isStartingGame, setIsStartingGame] = useState<boolean>(false);
 
   // Game state with pixel art battles
   const [gameState, setGameState] = useState<GameState>({
@@ -101,12 +106,15 @@ const App: React.FC = () => {
   const handleStorySubmit = useCallback(async (story: string | null, mode: 'inspiration' | 'recreation' | 'continuation') => {
     setShowStoryInput(false);
     setIsGeneratingClasses(true);
+    setClassGenerationStep('analyzing');
 
     try {
-      // Generate biome progression based on story context
+      // Step 1: Generate biome progression based on story context
+      setClassGenerationStep('world');
       const biomeProgression = await generateBiomeProgression(story, mode, 20);
 
-      // Generate character classes based on story and mode
+      // Step 2: Generate character classes based on story and mode
+      setClassGenerationStep('classes');
       const generatedClasses = await generateCharacterClasses(story, mode);
 
       // Update game state with story context and biome progression
@@ -118,6 +126,7 @@ const App: React.FC = () => {
       }));
 
       setAvailableClasses(generatedClasses);
+      setClassGenerationStep('complete');
     } catch (error) {
       console.error('Failed to generate game content:', error);
       setAvailableClasses(CHARACTER_CLASSES); // Fallback to defaults
@@ -134,7 +143,15 @@ const App: React.FC = () => {
   }, []);
 
   const handleCharacterSelect = useCallback(async (character: CharacterClass) => {
+    // Immediately show loading state
+    setIsStartingGame(true);
+
+    // Small delay to ensure UI updates before heavy processing
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
+    setRoomGenerationProgress(0);
+    setRoomGenerationStep('Analyzing story context...');
 
     roomCache.initialize(gameState.storySeed);
 
@@ -142,6 +159,9 @@ const App: React.FC = () => {
     let initialRoom = roomCache.getRoom('room_0');
 
     if (!initialRoom) {
+      setRoomGenerationProgress(25);
+      setRoomGenerationStep('Creating NPCs and enemies...');
+
       initialRoom = await generateRoom(
         'room_0',
         gameState.storySeed,
@@ -151,9 +171,18 @@ const App: React.FC = () => {
         undefined,
         gameState.storyMode
       );
+    } else {
+      setRoomGenerationProgress(50);
     }
 
+    setRoomGenerationProgress(50);
+    setRoomGenerationStep('Generating sprites...');
+
     initialRoom = await enhanceRoomWithSprites(initialRoom, biomeKey, gameState.storyContext, 0, gameState.storyMode);
+
+    setRoomGenerationProgress(90);
+    setRoomGenerationStep('Building environment...');
+
     roomCache.saveRoom(initialRoom);
 
     const rooms = new Map<string, Room>();
@@ -189,6 +218,9 @@ const App: React.FC = () => {
       storyConsequences: [],
       isGeneratingRoom: false,
     }));
+
+    setIsStartingGame(false);
+    setRoomGenerationProgress(100);
   }, [gameState.storySeed, gameState.biomeProgression, gameState.storyContext]);
 
   // Handle player movement
@@ -199,6 +231,8 @@ const App: React.FC = () => {
   const handleScreenExit = useCallback(
     async (direction: 'right' | 'left' | 'up' | 'down') => {
       setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
+      setRoomGenerationProgress(0);
+      setRoomGenerationStep('Analyzing story context...');
 
       const newRoomCounter = gameState.roomCounter + 1;
       const newRoomId = `room_${newRoomCounter}`;
@@ -208,6 +242,9 @@ const App: React.FC = () => {
       let newRoom = roomCache.getRoom(newRoomId);
 
       if (!newRoom) {
+        setRoomGenerationProgress(25);
+        setRoomGenerationStep('Creating NPCs and enemies...');
+
         newRoom = await generateRoom(
           newRoomId,
           gameState.storySeed,
@@ -217,9 +254,18 @@ const App: React.FC = () => {
           undefined,
           gameState.storyMode
         );
+      } else {
+        setRoomGenerationProgress(50);
       }
 
+      setRoomGenerationProgress(50);
+      setRoomGenerationStep('Generating sprites...');
+
       newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext, newRoomCounter, gameState.storyMode);
+
+      setRoomGenerationProgress(90);
+      setRoomGenerationStep('Building environment...');
+
       roomCache.saveRoom(newRoom);
 
       const newRooms = new Map(gameState.rooms);
@@ -676,6 +722,7 @@ const App: React.FC = () => {
       setSceneData(null);
       setError(null);
 
+      // Start LLM request immediately (runs in background)
       internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP, currentInteractingObject);
     },
     [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter, currentInteractingObject, gameState.currentRoomId],
@@ -986,11 +1033,21 @@ const App: React.FC = () => {
           {showStoryInput ? (
             <StoryInput onSubmit={handleStorySubmit} />
           ) : isGeneratingClasses ? (
-            <ClassGenerationLoading />
+            <ClassGenerationLoading currentStep={classGenerationStep} />
           ) : !gameState.selectedCharacter ? (
             <CharacterSelection
               characters={availableClasses}
               onSelectCharacter={handleCharacterSelect}
+              isStartingGame={isStartingGame}
+              onLoadingStateChange={(loading) => {
+                if (loading) {
+                  setClassGenerationStep('sprites');
+                  setIsGeneratingClasses(true);
+                } else {
+                  setIsGeneratingClasses(false);
+                  setClassGenerationStep('complete');
+                }
+              }}
             />
           ) : !gameState.isAlive ? (
             <div
@@ -1093,12 +1150,10 @@ const App: React.FC = () => {
               {/* Game Area */}
               <div className="flex-1 overflow-hidden relative" style={{backgroundColor: '#1a1a1a'}}>
                 {gameState.isGeneratingRoom ? (
-                  <div className="flex items-center justify-center h-full" style={{fontFamily: 'monospace', color: '#f4e8d0'}}>
-                    <div className="text-center">
-                      <div className="text-4xl mb-4">⚙️</div>
-                      <div className="text-xl">Generating sprites...</div>
-                    </div>
-                  </div>
+                  <RoomGenerationLoading
+                    currentStep={roomGenerationStep}
+                    progress={roomGenerationProgress}
+                  />
                 ) : currentRoom && gameState.selectedCharacter ? (
                   <GameCanvas
                     character={gameState.selectedCharacter}
