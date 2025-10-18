@@ -17,7 +17,7 @@ import { BattleSceneData, VisualBattleScene } from './components/VisualBattleSce
 import { Window } from './components/Window';
 import { INITIAL_MAX_HISTORY_LENGTH } from './constants';
 import { generateCharacterClasses } from './services/classGenerator';
-import { streamAppContent } from './services/geminiService';
+import { streamAppContent, generateBiomeProgression } from './services/geminiService';
 import { generateRoom } from './services/roomGenerator';
 import {
   BattleAnimation,
@@ -71,6 +71,7 @@ const App: React.FC = () => {
     storySeed: Math.floor(Math.random() * 10000),
     storyContext: null,
     storyMode: 'inspiration',
+    biomeProgression: [],
     isInGame: false,
     playerPosition: {x: 400, y: 300},
     currentRoomId: 'room_0',
@@ -92,30 +93,51 @@ const App: React.FC = () => {
 
   // Handle story input submission
   const handleStorySubmit = useCallback(async (story: string | null, mode: 'inspiration' | 'recreation' | 'continuation') => {
-    setGameState((prev) => ({
-      ...prev,
-      storyContext: story,
-      storyMode: mode,
-    }));
     setShowStoryInput(false);
-
-    // Generate character classes based on story and mode
     setIsGeneratingClasses(true);
+
     try {
+      // Generate biome progression based on story context
+      const biomeProgression = await generateBiomeProgression(story, mode, 20);
+
+      // Generate character classes based on story and mode
       const generatedClasses = await generateCharacterClasses(story, mode);
+
+      // Update game state with story context and biome progression
+      setGameState((prev) => ({
+        ...prev,
+        storyContext: story,
+        storyMode: mode,
+        biomeProgression: biomeProgression,
+      }));
+
       setAvailableClasses(generatedClasses);
     } catch (error) {
-      console.error('Failed to generate classes:', error);
+      console.error('Failed to generate game content:', error);
       setAvailableClasses(CHARACTER_CLASSES); // Fallback to defaults
+      // Fallback biome progression
+      setGameState((prev) => ({
+        ...prev,
+        storyContext: story,
+        storyMode: mode,
+        biomeProgression: Array(20).fill('forest'),
+      }));
     } finally {
       setIsGeneratingClasses(false);
     }
   }, []);
 
   // Handle character selection
-  const handleCharacterSelect = useCallback((character: CharacterClass) => {
-    // Generate initial room
-    const initialRoom = generateRoom('room_0', gameState.storySeed, 0);
+  const handleCharacterSelect = useCallback(async (character: CharacterClass) => {
+    // Generate initial room with dynamic biome
+    const biomeKey = gameState.biomeProgression[0] || 'forest';
+    const initialRoom = await generateRoom(
+      'room_0',
+      gameState.storySeed,
+      0,
+      biomeKey,
+      gameState.storyContext
+    );
     const rooms = new Map<string, Room>();
     rooms.set('room_0', initialRoom);
 
@@ -139,7 +161,7 @@ const App: React.FC = () => {
       inventory: [],
       storyConsequences: [],
     }));
-  }, [gameState.storySeed]);
+  }, [gameState.storySeed, gameState.biomeProgression, gameState.storyContext]);
 
   // Handle player movement
   const handlePlayerMove = useCallback((newPosition: Position) => {
@@ -148,68 +170,70 @@ const App: React.FC = () => {
 
   // Handle screen exit (moving to edge)
   const handleScreenExit = useCallback(
-    (direction: 'right' | 'left' | 'up' | 'down') => {
-      setGameState((prev) => {
-        const newRoomCounter = prev.roomCounter + 1;
-        const newRoomId = `room_${newRoomCounter}`;
+    async (direction: 'right' | 'left' | 'up' | 'down') => {
+      const newRoomCounter = gameState.roomCounter + 1;
+      const newRoomId = `room_${newRoomCounter}`;
 
-        // Generate new room
-        const newRoom = generateRoom(
-          newRoomId,
-          prev.storySeed,
-          newRoomCounter,
-        );
+      // Get biome for this room from progression
+      const biomeKey = gameState.biomeProgression[newRoomCounter] || 'forest';
 
-        const newRooms = new Map(prev.rooms);
-        newRooms.set(newRoomId, newRoom);
+      // Generate new room with dynamic biome
+      const newRoom = await generateRoom(
+        newRoomId,
+        gameState.storySeed,
+        newRoomCounter,
+        biomeKey,
+        gameState.storyContext
+      );
 
-        const tileMap = newRoom.tileMap;
+      const newRooms = new Map(gameState.rooms);
+      newRooms.set(newRoomId, newRoom);
 
-        let newPosition = tileMap?.spawnPoint || { x: 400, y: 300 };
+      const tileMap = newRoom.tileMap;
+      let newPosition = tileMap?.spawnPoint || { x: 400, y: 300 };
 
-        if (tileMap) {
-          const { width, height, tileSize, spawnPoint } = tileMap;
-          const mapWidth = width * tileSize;
-          const mapHeight = height * tileSize;
-          const edgeBuffer = Math.max(tileSize * 2, 60);
+      if (tileMap) {
+        const { width, height, tileSize, spawnPoint } = tileMap;
+        const mapWidth = width * tileSize;
+        const mapHeight = height * tileSize;
+        const edgeBuffer = Math.max(tileSize * 2, 60);
 
-          const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+        const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-          switch (direction) {
-            case 'left':
-              newPosition = {
-                x: clamp(mapWidth - spawnPoint.x, edgeBuffer, mapWidth - edgeBuffer),
-                y: spawnPoint.y,
-              };
-              break;
-            case 'right':
-              newPosition = spawnPoint;
-              break;
-            case 'up':
-              newPosition = {
-                x: spawnPoint.x,
-                y: clamp(mapHeight - spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
-              };
-              break;
-            case 'down':
-              newPosition = {
-                x: spawnPoint.x,
-                y: clamp(spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
-              };
-              break;
-          }
+        switch (direction) {
+          case 'left':
+            newPosition = {
+              x: clamp(mapWidth - spawnPoint.x, edgeBuffer, mapWidth - edgeBuffer),
+              y: spawnPoint.y,
+            };
+            break;
+          case 'right':
+            newPosition = spawnPoint;
+            break;
+          case 'up':
+            newPosition = {
+              x: spawnPoint.x,
+              y: clamp(mapHeight - spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
+            };
+            break;
+          case 'down':
+            newPosition = {
+              x: spawnPoint.x,
+              y: clamp(spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
+            };
+            break;
         }
+      }
 
-        return {
-          ...prev,
-          currentRoomId: newRoomId,
-          playerPosition: newPosition,
-          rooms: newRooms,
-          roomCounter: newRoomCounter,
-        };
-      });
+      setGameState((prev) => ({
+        ...prev,
+        currentRoomId: newRoomId,
+        playerPosition: newPosition,
+        rooms: newRooms,
+        roomCounter: newRoomCounter,
+      }));
     },
-    [],
+    [gameState.roomCounter, gameState.biomeProgression, gameState.storySeed, gameState.storyContext, gameState.rooms],
   );
 
   // Handle adding experience and leveling up
@@ -746,6 +770,7 @@ const App: React.FC = () => {
       storySeed: newSeed,
       storyContext: null,
       storyMode: 'inspiration',
+      biomeProgression: [],
       isInGame: false,
       playerPosition: {x: 400, y: 300},
       currentRoomId: 'room_0',

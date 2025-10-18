@@ -114,6 +114,7 @@ export interface GameState {
   storySeed: number;
   storyContext: string | null; // User-provided story for narrative generation
   storyMode: StoryMode; // How the AI should use the story
+  biomeProgression: string[]; // AI-generated biome progression for all rooms
   isInGame: boolean;
   playerPosition: Position;
   currentRoomId: string;

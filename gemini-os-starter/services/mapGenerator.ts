@@ -4,21 +4,11 @@
  */
 /* tslint:disable */
 
-export type TileType =
-  | 'grass'
-  | 'path'
-  | 'stone'
-  | 'water'
-  | 'tree'
-  | 'bush'
-  | 'wall'
-  | 'floor'
-  | 'dirt'
-  | 'sand'
-  | 'rock'
-  | 'flowers';
+import { BiomeDefinition } from '../types/biomes';
 
-export type BiomeType = 'forest' | 'dungeon' | 'plains' | 'desert' | 'cave';
+export type TileType = string; // Now dynamic based on biome definition
+
+export type BiomeType = 'forest' | 'dungeon' | 'plains' | 'desert' | 'cave'; // Legacy, kept for backwards compatibility
 
 export interface Tile {
   type: TileType;
@@ -32,7 +22,8 @@ export interface TileMap {
   height: number;
   tileSize: number;
   tiles: Tile[][];
-  biome: BiomeType;
+  biome: BiomeType; // Legacy field
+  biomeDefinition?: BiomeDefinition; // New dynamic biome definition
   spawnPoint: { x: number; y: number };
   pathPoints: { x: number; y: number }[]; // Points along the main path for enemy placement
 }
@@ -146,12 +137,14 @@ function expandPath(
 /**
  * Generate a tile-based map for a specific biome
  * ALWAYS creates a horizontal left-to-right path for consistency
+ * Now supports dynamic BiomeDefinition for AI-generated biomes
  */
 export function generateTileMap(
   roomId: string,
   storySeed: number,
   roomNumber: number,
   biomeType?: BiomeType,
+  biomeDefinition?: BiomeDefinition,
 ): TileMap {
   const seed = storySeed + roomNumber * 1000;
   const random = seededRandom(seed);
@@ -163,7 +156,7 @@ export function generateTileMap(
 
   // Determine biome
   let biome: BiomeType = biomeType || 'forest';
-  if (!biomeType) {
+  if (!biomeType && !biomeDefinition) {
     if (roomNumber < 3) biome = 'forest';
     else if (roomNumber < 6) biome = 'plains';
     else if (roomNumber < 10) biome = 'desert';
@@ -174,33 +167,62 @@ export function generateTileMap(
   let baseTile: TileType;
   let pathTile: TileType;
   let obstacleTiles: TileType[];
+  let baseColor: string;
+  let pathColor: string;
+  let obstacleColors: string[];
 
-  switch (biome) {
-    case 'forest':
-      baseTile = 'grass';
-      pathTile = 'dirt';
-      obstacleTiles = ['tree', 'bush'];
-      break;
-    case 'plains':
-      baseTile = 'grass';
-      pathTile = 'path';
-      obstacleTiles = ['bush', 'flowers', 'rock'];
-      break;
-    case 'desert':
-      baseTile = 'sand';
-      pathTile = 'stone';
-      obstacleTiles = ['rock', 'bush'];
-      break;
-    case 'dungeon':
-      baseTile = 'floor';
-      pathTile = 'floor';
-      obstacleTiles = ['wall'];
-      break;
-    case 'cave':
-      baseTile = 'stone';
-      pathTile = 'floor';
-      obstacleTiles = ['wall', 'rock'];
-      break;
+  // Use dynamic biome definition if provided
+  if (biomeDefinition) {
+    baseTile = biomeDefinition.baseTile;
+    pathTile = biomeDefinition.pathTile;
+    obstacleTiles = biomeDefinition.obstacleTiles;
+    baseColor = biomeDefinition.colors.base;
+    pathColor = biomeDefinition.colors.path;
+    obstacleColors = biomeDefinition.colors.obstacles;
+  } else {
+    // Fallback to legacy biome types
+    switch (biome) {
+      case 'forest':
+        baseTile = 'grass';
+        pathTile = 'dirt';
+        obstacleTiles = ['tree', 'bush'];
+        baseColor = '#4ade80';
+        pathColor = '#92400e';
+        obstacleColors = ['#22c55e', '#16a34a'];
+        break;
+      case 'plains':
+        baseTile = 'grass';
+        pathTile = 'path';
+        obstacleTiles = ['bush', 'flowers', 'rock'];
+        baseColor = '#4ade80';
+        pathColor = '#a8a29e';
+        obstacleColors = ['#16a34a', '#f472b6', '#a1a1aa'];
+        break;
+      case 'desert':
+        baseTile = 'sand';
+        pathTile = 'stone';
+        obstacleTiles = ['rock', 'bush'];
+        baseColor = '#fbbf24';
+        pathColor = '#78716c';
+        obstacleColors = ['#a1a1aa', '#16a34a'];
+        break;
+      case 'dungeon':
+        baseTile = 'floor';
+        pathTile = 'floor';
+        obstacleTiles = ['wall'];
+        baseColor = '#d6d3d1';
+        pathColor = '#d6d3d1';
+        obstacleColors = ['#57534e'];
+        break;
+      case 'cave':
+        baseTile = 'stone';
+        pathTile = 'floor';
+        obstacleTiles = ['wall', 'rock'];
+        baseColor = '#78716c';
+        pathColor = '#d6d3d1';
+        obstacleColors = ['#57534e', '#a1a1aa'];
+        break;
+    }
   }
 
   // Initialize map with base tiles
@@ -208,7 +230,16 @@ export function generateTileMap(
   for (let y = 0; y < height; y++) {
     tiles[y] = [];
     for (let x = 0; x < width; x++) {
-      tiles[y][x] = { ...TILE_CONFIGS[baseTile] };
+      // Use TILE_CONFIGS if available, otherwise create tile from biome definition
+      if (TILE_CONFIGS[baseTile]) {
+        tiles[y][x] = { ...TILE_CONFIGS[baseTile] };
+      } else {
+        tiles[y][x] = {
+          type: baseTile,
+          walkable: false,
+          color: baseColor,
+        };
+      }
     }
   }
 
@@ -226,7 +257,17 @@ export function generateTileMap(
   const pathPoints: { x: number; y: number }[] = [];
   pathSet.forEach((key) => {
     const [x, y] = key.split(',').map(Number);
-    tiles[y][x] = { ...TILE_CONFIGS[pathTile] };
+
+    // Use TILE_CONFIGS if available, otherwise create tile from biome definition
+    if (TILE_CONFIGS[pathTile]) {
+      tiles[y][x] = { ...TILE_CONFIGS[pathTile] };
+    } else {
+      tiles[y][x] = {
+        type: pathTile,
+        walkable: true,
+        color: pathColor,
+      };
+    }
 
     // Store path points for enemy placement (sample every few tiles)
     if (pathLine.some(p => p.x === x && p.y === y) && pathPoints.length < 15) {
@@ -250,31 +291,62 @@ export function generateTileMap(
 
         // Only place obstacles if not too close to path edges
         if (!adjacentToPath || random() > 0.7) {
-          const obstacleTile = obstacleTiles[Math.floor(random() * obstacleTiles.length)];
-          tiles[y][x] = { ...TILE_CONFIGS[obstacleTile] };
+          const obstacleIndex = Math.floor(random() * obstacleTiles.length);
+          const obstacleTile = obstacleTiles[obstacleIndex];
+          const obstacleColor = obstacleColors[obstacleIndex % obstacleColors.length];
+
+          // Use TILE_CONFIGS if available, otherwise create tile from biome definition
+          if (TILE_CONFIGS[obstacleTile]) {
+            tiles[y][x] = { ...TILE_CONFIGS[obstacleTile] };
+          } else {
+            tiles[y][x] = {
+              type: obstacleTile,
+              walkable: false,
+              color: obstacleColor,
+            };
+          }
         }
       }
     }
   }
 
-  // Create borders for dungeons
-  if (biome === 'dungeon' || biome === 'cave') {
+  // Create borders for dungeons/caves
+  if (biome === 'dungeon' || biome === 'cave' || (biomeDefinition && obstacleTiles.includes('wall'))) {
+    const wallObstacle = obstacleTiles.find(t => t.includes('wall')) || obstacleTiles[0];
+    const wallColor = obstacleColors[0];
+
     for (let x = 0; x < width; x++) {
       // Don't block path at edges
       if (!pathSet.has(`${x},0`)) {
-        tiles[0][x] = { ...TILE_CONFIGS['wall'] };
+        if (TILE_CONFIGS['wall']) {
+          tiles[0][x] = { ...TILE_CONFIGS['wall'] };
+        } else {
+          tiles[0][x] = { type: wallObstacle, walkable: false, color: wallColor };
+        }
       }
       if (!pathSet.has(`${x},${height-1}`)) {
-        tiles[height - 1][x] = { ...TILE_CONFIGS['wall'] };
+        if (TILE_CONFIGS['wall']) {
+          tiles[height - 1][x] = { ...TILE_CONFIGS['wall'] };
+        } else {
+          tiles[height - 1][x] = { type: wallObstacle, walkable: false, color: wallColor };
+        }
       }
     }
     for (let y = 0; y < height; y++) {
       // Don't block path at edges
       if (!pathSet.has(`0,${y}`)) {
-        tiles[y][0] = { ...TILE_CONFIGS['wall'] };
+        if (TILE_CONFIGS['wall']) {
+          tiles[y][0] = { ...TILE_CONFIGS['wall'] };
+        } else {
+          tiles[y][0] = { type: wallObstacle, walkable: false, color: wallColor };
+        }
       }
       if (!pathSet.has(`${width-1},${y}`)) {
-        tiles[y][width - 1] = { ...TILE_CONFIGS['wall'] };
+        if (TILE_CONFIGS['wall']) {
+          tiles[y][width - 1] = { ...TILE_CONFIGS['wall'] };
+        } else {
+          tiles[y][width - 1] = { type: wallObstacle, walkable: false, color: wallColor };
+        }
       }
     }
   }
@@ -287,6 +359,7 @@ export function generateTileMap(
     tileSize,
     tiles,
     biome,
+    biomeDefinition, // Include the full biome definition for reference
     spawnPoint: { x: 2 * tileSize, y: midY * tileSize + tileSize / 2 },
     pathPoints: pathPoints.map(p => ({ x: p.x * tileSize + tileSize / 2, y: p.y * tileSize + tileSize / 2 })),
   };
