@@ -10,6 +10,7 @@ import { slicePanoramaImage, createFallbackScene } from '../utils/imageSlicing';
 import { getCachedImage, cacheImage } from '../utils/imageCache';
 import { generatePixelArt } from './falService';
 import { tileMapToReferenceImage, resizeTileMapReference, combineTileMapsAsPanorama, tileMapToBlob } from '../utils/tileMapToImage';
+import { USE_BIOME_FOR_IMAGES } from '../constants';
 
 if (!process.env.API_KEY) {
   console.error('API_KEY environment variable is not set for scene generation.');
@@ -44,7 +45,7 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     previousRoomDescription,
   } = params;
 
-  // Biome descriptions - STYLE ONLY, no layout
+  // Biome descriptions - STYLE ONLY, no layout (only used if USE_BIOME_FOR_IMAGES is enabled)
   const biomeDescriptions: Record<BiomeType, string> = {
     forest: 'lush forest with ancient trees, moss-covered stones, dappled sunlight filtering through leaves',
     plains: 'open grasslands with rolling hills, wildflowers, and distant mountains in soft focus',
@@ -52,6 +53,8 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     cave: 'dark cavern with stalactites, underground pools, and glowing crystals casting ethereal light',
     dungeon: 'ancient stone corridors with flickering torches, crumbling walls, and mysterious shadows',
   };
+
+  const biomeStyle = USE_BIOME_FOR_IMAGES ? biomeDescriptions[biome] : 'generic fantasy RPG environment';
 
   // Summarize objects - VISUAL STYLE, not placement
   const enemies = objects.filter((o) => o.type === 'enemy');
@@ -90,7 +93,7 @@ ${modeInstructions[storyMode || 'inspiration']}
 ${storySection}
 
 SCENE: Room ${roomNumber} - ${description}
-BIOME STYLE: ${biomeDescriptions[biome]}
+${USE_BIOME_FOR_IMAGES ? `BIOME STYLE: ${biomeStyle}` : `STYLE: ${biomeStyle} based on room description`}
 ATMOSPHERE: ${atmosphereHints || 'peaceful, serene environment'}
 ${previousRoomDescription ? `CONTINUITY: Maintains visual consistency with previous area: ${previousRoomDescription}` : ''}
 
@@ -120,6 +123,8 @@ export async function generateSingleRoomScene(
   const { roomId, biome } = params;
 
   try {
+    console.log(`[SceneGen] USE_BIOME_FOR_IMAGES: ${USE_BIOME_FOR_IMAGES} (${USE_BIOME_FOR_IMAGES ? 'biome styling enabled' : 'generic styling'})`);
+
     // Build the request for Gemini
     const promptRequest = buildScenePromptRequest(params);
 

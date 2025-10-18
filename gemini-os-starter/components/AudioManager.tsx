@@ -24,7 +24,7 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
 
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('gemini-os-music-volume');
-    return saved !== null ? parseFloat(saved) : 0.3; // Lower default volume
+    return saved !== null ? parseFloat(saved) : 0.15; // Subtle background music
   });
 
   const [showControls, setShowControls] = useState(false);
@@ -105,8 +105,8 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
       console.log('[AudioManager] Battle started, layering battle music...');
       const context = buildMusicContext();
 
-      // Duck main theme to 35% volume
-      duckMainTheme(0.35);
+      // Duck main theme to 20% volume
+      duckMainTheme(0.2);
 
       // Play battle music overlay
       playOverlay(context, 'battle');

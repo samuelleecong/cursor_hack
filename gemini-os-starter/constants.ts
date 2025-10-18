@@ -20,6 +20,9 @@ export const APP_DEFINITIONS_CONFIG: AppDefinition[] = [
 
 export const INITIAL_MAX_HISTORY_LENGTH = 10; // Remember last 10 interactions for continuity
 
+// Image Generation Configuration
+export const USE_BIOME_FOR_IMAGES = true; // Toggle to enable/disable biome-based styling in scene generation
+
 export const getSystemPrompt = (
   maxHistory: number,
   characterClass?: string,

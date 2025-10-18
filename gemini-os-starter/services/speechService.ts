@@ -18,12 +18,12 @@ import { speechCache } from './speechCache';
 
 /**
  * Default voice settings
- * NOTE: autoPlay is FALSE by default - user must click to play speech
+ * NOTE: autoPlay is TRUE by default - speech plays automatically
  */
 const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   enabled: true,
   volume: 0.7,
-  autoPlay: false, // Click-to-play by default
+  autoPlay: true, // Auto-play by default
   narratorEnabled: true,
   speed: 1.0,
   preferredModel: 'elevenlabs', // Using ElevenLabs for premium quality

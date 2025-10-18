@@ -6,7 +6,6 @@
 import React, {useState, useEffect} from 'react';
 import {generateBattleScene, GeneratedImage} from '../services/falService';
 import {getCachedImage, cacheImage} from '../utils/imageCache';
-import { SpeakableText } from './SpeakableText';
 
 export interface BattleSceneData {
   scene: string;
@@ -190,20 +189,11 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
 
       {/* Story Text & Choices - Bottom Panel */}
       <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent p-8 border-t-4 border-purple-600">
-        {/* Scene Description with Voice */}
+        {/* Scene Description */}
         <div className="max-w-4xl mx-auto mb-6">
           <div className="bg-black/70 backdrop-blur-md rounded-xl p-6 border-2 border-purple-500/50">
             <div className="text-gray-100 text-xl leading-relaxed text-center font-medium">
-              <SpeakableText
-                text={sceneData.scene}
-                characterType="narrator"
-                emotion="neutral"
-                buttonSize="medium"
-                buttonPosition="left"
-                style={{ justifyContent: 'center' }}
-              >
-                {sceneData.scene}
-              </SpeakableText>
+              {sceneData.scene}
             </div>
           </div>
         </div>
@@ -228,17 +218,8 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
                   className={`${getButtonStyle()} text-white font-bold px-6 py-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 hover:-translate-y-1 shadow-lg active:scale-95`}
                   disabled={generatingImages}
                 >
-                  <div className="flex items-center justify-center gap-2">
-                    <SpeakableText
-                      text={choice.text}
-                      characterType={choice.type === 'dialogue' ? 'hero' : choice.type === 'combat' || choice.type === 'damage' ? 'warrior' : 'hero'}
-                      emotion={choice.type === 'combat' || choice.type === 'damage' ? 'heroic' : 'neutral'}
-                      buttonSize="small"
-                      showButton={true}
-                      style={{ display: 'inline-flex', alignItems: 'center' }}
-                    >
-                      {choice.text}
-                    </SpeakableText>
+                  <div className="flex items-center justify-center">
+                    {choice.text}
                   </div>
                   { (choice.type === 'damage' || choice.type === 'combat' || choice.type === 'heal') && choice.value !== undefined && (
                     <span className="block text-sm mt-1 opacity-90">

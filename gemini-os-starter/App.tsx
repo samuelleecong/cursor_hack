@@ -31,9 +31,8 @@ import {
   Room
 } from './types';
 // Voice speech components
-import { SpeakableText, DialogueBox, NPCInteraction } from './components/SpeakableText';
 import { VoiceControls } from './components/VoiceControls';
-import { SpeechButton } from './components/SpeechButton';
+import { speechService } from './services/speechService';
 
 // Track rooms currently being generated to prevent duplicate calls
 const generatingRooms = new Set<string>();
@@ -105,6 +104,40 @@ const App: React.FC = () => {
   const [currentMaxHistoryLength] = useState<number>(INITIAL_MAX_HISTORY_LENGTH);
   const [showAIDialog, setShowAIDialog] = useState<boolean>(false);
   const [currentInteractingObject, setCurrentInteractingObject] = useState<GameObject | null>(null);
+
+  // Get current room
+  const currentRoom = gameState.rooms.get(gameState.currentRoomId);
+
+  // Auto-play scene narration when dialogue appears
+  useEffect(() => {
+    if (sceneData?.scene && showAIDialog) {
+      // Stop any currently playing speech to prevent overlap
+      speechService.stopSpeech();
+
+      // Slight delay to ensure UI is rendered
+      setTimeout(() => {
+        speechService.speak(sceneData.scene, 'narrator', 'neutral', true);
+      }, 100);
+    }
+  }, [sceneData?.scene, showAIDialog]);
+
+  // Auto-play room descriptions when entering new rooms
+  useEffect(() => {
+    if (
+      currentRoom?.description &&
+      gameState.isInGame &&
+      !showAIDialog &&
+      !gameState.battleState
+    ) {
+      // Stop any currently playing speech
+      speechService.stopSpeech();
+
+      // Delay to allow room transition
+      setTimeout(() => {
+        speechService.speak(currentRoom.description, 'narrator', 'mysterious', true);
+      }, 300);
+    }
+  }, [gameState.currentRoomId, gameState.isInGame, showAIDialog, gameState.battleState]);
 
   // Handle story input submission
   const handleStorySubmit = useCallback(async (story: string | null, mode: 'inspiration' | 'recreation' | 'continuation') => {
@@ -1046,9 +1079,6 @@ const App: React.FC = () => {
     setShowStoryInput(true);
   }, []);
 
-  // Get current room
-  const currentRoom = gameState.rooms.get(gameState.currentRoomId);
-
   return (
     <div className="w-screen h-screen overflow-hidden" style={{backgroundColor: '#2d5a4e'}}>
       <AnimationOverlay
@@ -1197,21 +1227,14 @@ const App: React.FC = () => {
                     padding: '12px 20px',
                     maxWidth: '700px',
                   }}>
-                    <SpeakableText
-                      text={currentRoom.description}
-                      characterType="narrator"
-                      emotion="mysterious"
-                      buttonSize="small"
-                      style={{
-                        color: '#e5e7eb',
-                        fontSize: '16px',
-                        fontWeight: 'bold',
-                        textAlign: 'center',
-                        display: 'block',
-                      }}
-                    >
+                    <div style={{
+                      color: '#e5e7eb',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                    }}>
                       {currentRoom.description}
-                    </SpeakableText>
+                    </div>
                   </div>
                 )}
 

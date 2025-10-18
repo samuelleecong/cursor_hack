@@ -74,25 +74,8 @@ export const VoiceControls: React.FC<VoiceControlsProps> = ({ compact = false })
   };
 
   if (compact) {
-    return (
-      <div className="voice-controls-compact" style={styles.compactContainer}>
-        <button
-          onClick={handleToggleEnabled}
-          style={{
-            ...styles.button,
-            backgroundColor: settings.enabled ? '#4CAF50' : '#f44336',
-          }}
-          title={settings.enabled ? 'Voice Enabled' : 'Voice Disabled'}
-        >
-          🔊 {settings.enabled ? 'ON' : 'OFF'}
-        </button>
-        {isPlaying && (
-          <button onClick={handleStop} style={styles.button} title="Stop Speech">
-            ⏹️
-          </button>
-        )}
-      </div>
-    );
+    // Hide compact controls - speech auto-plays now
+    return null;
   }
 
   return (
