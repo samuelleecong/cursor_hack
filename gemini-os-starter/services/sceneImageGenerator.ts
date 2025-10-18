@@ -202,21 +202,21 @@ export async function generateSingleRoomScene(
     // Build composition-aware prompt with explicit instructions
     const compositionPrompt = `${imagePrompt}
 
-CRITICAL COMPOSITION RULES:
-1. The reference image shows a YELLOW PATH on BLACK background - this is a LAYOUT MASK, not literal colors.
-2. FILL THE ENTIRE 1000x800 CANVAS with the scene. NO black voids, NO empty space.
-3. Yellow areas in reference = walkable path (style as dirt trail, stone path, grass field, wooden planks, concrete, etc.)
-4. Black areas in reference = NON-WALKABLE zones (FILL with obstacles, decoration, environment details - trees, rocks, water, walls, buildings, crowd stands, etc.)
-5. Preserve the EXACT path shape and position. The path MUST flow from left edge to right edge.
-6. DO NOT leave any black background showing. Every pixel must be part of the styled scene.
-7. The entire canvas is your scene - use all 1000x800 pixels with rich environmental details.`;
+CRITICAL COMPOSITION RULES - LAYOUT MASK INTERPRETATION:
+1. The reference image is a LAYOUT GUIDE ONLY (yellow/black are NOT the final colors - they get completely replaced)
+2. YELLOW ZONES in mask → REPLACE with styled walkable surfaces (dirt paths, stone trails, grass fields, wooden walkways, concrete, sand, sports field lines, etc. - match your art style)
+3. BLACK ZONES in mask → REPLACE with environmental obstacles and decoration (trees, rocks, water, walls, buildings, crowd stands, furniture, plants, barriers, etc. - fill completely)
+4. The EXACT SHAPE and POSITION of paths must be preserved, but styled realistically for the scene
+5. Paths MUST maintain continuity from left edge to right edge following the mask layout
+6. FILL THE ENTIRE 1000x800 CANVAS - no empty space, no visible mask colors, every pixel is rich environmental detail
+7. Final image should look completely natural and immersive with NO trace of the yellow/black reference mask`;
 
     const generatedImage = await generatePixelArt({
       prompt: compositionPrompt,
       type: 'scene',
       customDimensions: { width: 1000, height: 800 },
       referenceImage: referenceImage, // Pure path mask Blob
-      imageStrength: 0.98, // 98% adherence - MAXIMUM without being image copy (was 0.85)
+      imageStrength: 0.96, // 98% adherence - MAXIMUM without being image copy (was 0.85)
       useNanoBanana: true, // Gemini 2.5 Flash Image understands composition better
     });
 
@@ -304,16 +304,15 @@ Seamlessly blended artistic styles with unified lighting and color harmony. Natu
     // Build composition-aware panorama prompt
     const panoramaCompositionPrompt = `${panoramaStylePrompt}
 
-CRITICAL COMPOSITION RULES FOR PANORAMA:
-1. The reference is a 2000x800 LAYOUT MASK with YELLOW PATHS on BLACK background (not literal colors).
-2. FILL THE ENTIRE 2000x800 CANVAS with scene content. NO black voids, NO empty space.
-3. LEFT HALF (0-1000px): Current room - preserve its path layout exactly
-4. RIGHT HALF (1000-2000px): Next room - preserve its path layout exactly
-5. Yellow areas = walkable paths (style appropriately: dirt, stone, grass, concrete, field lines, etc.)
-6. Black areas = NON-WALKABLE zones (FILL with environment: obstacles, decoration, buildings, trees, rocks, walls, crowd stands, etc.)
-7. Paths MUST flow from left edge through center to right edge - this is SACRED geometry.
-8. DO NOT leave any black background showing. Use all 2000x800 pixels with rich environmental details.
-9. Blend the artistic styles smoothly at the 1000px midpoint for visual continuity.`;
+CRITICAL PANORAMA COMPOSITION - LAYOUT MASK INTERPRETATION:
+1. The reference is a 2000x800 LAYOUT GUIDE ONLY (yellow/black are NOT final colors - they indicate zones to replace)
+2. LEFT HALF (0-1000px): Current room layout | RIGHT HALF (1000-2000px): Next room layout
+3. YELLOW ZONES in mask → REPLACE with styled walkable surfaces matching your art style (dirt, stone, grass, concrete, field markings, wooden planks, sand, etc.)
+4. BLACK ZONES in mask → REPLACE with environmental obstacles and rich decoration (trees, rocks, water, walls, buildings, crowd stands, furniture, vehicles, terrain features, etc.)
+5. Path connectivity is SACRED - paths must flow continuously from left edge through center to right edge, preserving the EXACT mask geometry
+6. Blend artistic styles seamlessly at the 1000px midpoint for unified visual continuity
+7. FILL EVERY PIXEL of the 2000x800 canvas with scene content - no empty space, no visible mask colors
+8. Final panorama should look completely realistic and immersive with NO trace of the yellow/black reference mask`;
 
     // Generate 2000x800 panorama with combined tile map reference
     console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with PURE PATH MASK)' : ''}...`);
@@ -323,7 +322,7 @@ CRITICAL COMPOSITION RULES FOR PANORAMA:
       type: 'panorama',
       customDimensions: { width: 2000, height: 800 },
       referenceImage: panoramaReferenceUrl,
-      imageStrength: 0.98, // 98% adherence - MAXIMUM (was 0.85)
+      imageStrength: 0.93, // 98% adherence - MAXIMUM (was 0.85)
       useNanoBanana: true, // Gemini 2.5 Flash Image for panorama with layout preservation
     });
 
