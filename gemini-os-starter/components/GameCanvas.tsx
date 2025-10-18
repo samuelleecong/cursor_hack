@@ -48,6 +48,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const lastMoveTime = useRef<number>(0);
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [activeAnimations, setActiveAnimations] = useState<any[]>([]);
+  const isExiting = useRef(false);
 
   // Camera offset for following player
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
@@ -88,6 +89,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [battleState, onBattleEnd]);
+
+  useEffect(() => {
+    isExiting.current = false;
+  }, [room]);
 
   // Process animation queue
   useEffect(() => {
@@ -158,21 +163,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const mapHeight = tileMap.height * tileMap.tileSize;
 
         // Check map boundaries and trigger screen exit
-        if (newX > mapWidth - PLAYER_SIZE / 2) {
-          onScreenExit('right');
-          return;
-        }
-        if (newX < PLAYER_SIZE / 2) {
-          onScreenExit('left');
-          return;
-        }
-        if (newY > mapHeight - PLAYER_SIZE / 2) {
-          onScreenExit('down');
-          return;
-        }
-        if (newY < PLAYER_SIZE / 2) {
-          onScreenExit('up');
-          return;
+        if (!isExiting.current) {
+          if (newX > mapWidth - PLAYER_SIZE / 2) {
+            isExiting.current = true;
+            onScreenExit('right');
+            return;
+          }
+          if (newX < PLAYER_SIZE / 2) {
+            isExiting.current = true;
+            onScreenExit('left');
+            return;
+          }
+          if (newY > mapHeight - PLAYER_SIZE / 2) {
+            isExiting.current = true;
+            onScreenExit('down');
+            return;
+          }
+          if (newY < PLAYER_SIZE / 2) {
+            isExiting.current = true;
+            onScreenExit('up');
+            return;
+          }
         }
 
         // Collision detection with tile map

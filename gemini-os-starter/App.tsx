@@ -162,8 +162,42 @@ const App: React.FC = () => {
         const newRooms = new Map(prev.rooms);
         newRooms.set(newRoomId, newRoom);
 
-        // Use spawn point from new room
-        const newPosition = newRoom.tileMap?.spawnPoint || {x: 400, y: 300};
+        const tileMap = newRoom.tileMap;
+
+        let newPosition = tileMap?.spawnPoint || { x: 400, y: 300 };
+
+        if (tileMap) {
+          const { width, height, tileSize, spawnPoint } = tileMap;
+          const mapWidth = width * tileSize;
+          const mapHeight = height * tileSize;
+          const edgeBuffer = Math.max(tileSize * 2, 60);
+
+          const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+          switch (direction) {
+            case 'left':
+              newPosition = {
+                x: clamp(mapWidth - spawnPoint.x, edgeBuffer, mapWidth - edgeBuffer),
+                y: spawnPoint.y,
+              };
+              break;
+            case 'right':
+              newPosition = spawnPoint;
+              break;
+            case 'up':
+              newPosition = {
+                x: spawnPoint.x,
+                y: clamp(mapHeight - spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
+              };
+              break;
+            case 'down':
+              newPosition = {
+                x: spawnPoint.x,
+                y: clamp(spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
+              };
+              break;
+          }
+        }
 
         return {
           ...prev,
