@@ -1,0 +1,182 @@
+{
+  "forest": {
+    "name": "Forest",
+    "baseTile": "grass",
+    "pathTile": "dirt",
+    "obstacleTiles": ["tree", "bush"],
+    "colors": {
+      "base": "#4ade80",
+      "path": "#92400e",
+      "obstacles": ["#22c55e", "#16a34a"]
+    },
+    "atmosphere": "Dense foliage and ancient trees surround a winding dirt path"
+  },
+  "swamp": {
+    "name": "Swamp",
+    "baseTile": "murkyWater",
+    "pathTile": "mud",
+    "obstacleTiles": ["deadTree", "algae", "rock"],
+    "colors": {
+      "base": "#2d5a3d",
+      "path": "#4a3f2e",
+      "obstacles": ["#1a2f1a", "#3d5a3d", "#57534e"]
+    },
+    "atmosphere": "Murky waters and twisted dead trees create an eerie atmosphere"
+  },
+  "ice": {
+    "name": "Ice Fields",
+    "baseTile": "snow",
+    "pathTile": "ice",
+    "obstacleTiles": ["iceberg", "frozenRock"],
+    "colors": {
+      "base": "#e0f2fe",
+      "path": "#bae6fd",
+      "obstacles": ["#7dd3fc", "#93c5fd"]
+    },
+    "atmosphere": "Frozen wasteland with bitter winds and towering ice formations"
+  },
+  "desert": {
+    "name": "Desert",
+    "baseTile": "sand",
+    "pathTile": "stone",
+    "obstacleTiles": ["rock", "cactus"],
+    "colors": {
+      "base": "#fbbf24",
+      "path": "#78716c",
+      "obstacles": ["#a1a1aa", "#16a34a"]
+    },
+    "atmosphere": "Endless dunes of golden sand stretch across the horizon"
+  },
+  "cave": {
+    "name": "Cave",
+    "baseTile": "stone",
+    "pathTile": "floor",
+    "obstacleTiles": ["wall", "rock", "stalagmite"],
+    "colors": {
+      "base": "#78716c",
+      "path": "#d6d3d1",
+      "obstacles": ["#57534e", "#a1a1aa", "#71717a"]
+    },
+    "atmosphere": "Dark cavern with damp stone walls and echoing chambers"
+  },
+  "dungeon": {
+    "name": "Dungeon",
+    "baseTile": "floor",
+    "pathTile": "floor",
+    "obstacleTiles": ["wall", "pillar"],
+    "colors": {
+      "base": "#d6d3d1",
+      "path": "#d6d3d1",
+      "obstacles": ["#57534e", "#44403c"]
+    },
+    "atmosphere": "Ancient stone dungeon with torch-lit corridors"
+  },
+  "plains": {
+    "name": "Plains",
+    "baseTile": "grass",
+    "pathTile": "path",
+    "obstacleTiles": ["bush", "flowers", "rock"],
+    "colors": {
+      "base": "#4ade80",
+      "path": "#a8a29e",
+      "obstacles": ["#16a34a", "#f472b6", "#a1a1aa"]
+    },
+    "atmosphere": "Open grasslands with wildflowers swaying in the breeze"
+  },
+  "castle": {
+    "name": "Castle",
+    "baseTile": "stoneFloor",
+    "pathTile": "carpet",
+    "obstacleTiles": ["pillar", "statue", "torch"],
+    "colors": {
+      "base": "#a8a29e",
+      "path": "#dc2626",
+      "obstacles": ["#57534e", "#78716c", "#f59e0b"]
+    },
+    "atmosphere": "Grand castle halls with ornate pillars and royal decorations"
+  },
+  "volcanic": {
+    "name": "Volcanic",
+    "baseTile": "lava",
+    "pathTile": "obsidian",
+    "obstacleTiles": ["magmaRock", "fire", "ash"],
+    "colors": {
+      "base": "#ef4444",
+      "path": "#1f2937",
+      "obstacles": ["#dc2626", "#f97316", "#78716c"]
+    },
+    "atmosphere": "Scorching volcanic landscape with rivers of molten lava"
+  },
+  "beach": {
+    "name": "Beach",
+    "baseTile": "sand",
+    "pathTile": "boardwalk",
+    "obstacleTiles": ["palmTree", "rock", "seashell"],
+    "colors": {
+      "base": "#fef3c7",
+      "path": "#92400e",
+      "obstacles": ["#22c55e", "#a8a29e", "#fbbf24"]
+    },
+    "atmosphere": "Sandy shore with crashing waves and tropical palm trees"
+  },
+  "darkforest": {
+    "name": "Dark Forest",
+    "baseTile": "darkGrass",
+    "pathTile": "dirt",
+    "obstacleTiles": ["deadTree", "thorn", "fog"],
+    "colors": {
+      "base": "#1a2f1a",
+      "path": "#3d2817",
+      "obstacles": ["#0f1a0f", "#4a3f2e", "#6b7280"]
+    },
+    "atmosphere": "Ominous dark woods shrouded in perpetual twilight and mist"
+  },
+  "crystalcave": {
+    "name": "Crystal Cave",
+    "baseTile": "crystal",
+    "pathTile": "smoothStone",
+    "obstacleTiles": ["crystalFormation", "gemstone", "rock"],
+    "colors": {
+      "base": "#a78bfa",
+      "path": "#e9d5ff",
+      "obstacles": ["#8b5cf6", "#ec4899", "#a1a1aa"]
+    },
+    "atmosphere": "Luminescent crystal formations cast ethereal purple light"
+  },
+  "ruins": {
+    "name": "Ancient Ruins",
+    "baseTile": "crackedStone",
+    "pathTile": "oldPath",
+    "obstacleTiles": ["brokenPillar", "rubble", "vine"],
+    "colors": {
+      "base": "#a8a29e",
+      "path": "#78716c",
+      "obstacles": ["#57534e", "#92400e", "#22c55e"]
+    },
+    "atmosphere": "Crumbling ancient structures reclaimed by nature over centuries"
+  },
+  "city": {
+    "name": "City Streets",
+    "baseTile": "pavement",
+    "pathTile": "road",
+    "obstacleTiles": ["building", "lamppost", "crate"],
+    "colors": {
+      "base": "#71717a",
+      "path": "#27272a",
+      "obstacles": ["#52525b", "#a1a1aa", "#92400e"]
+    },
+    "atmosphere": "Urban landscape with towering buildings and bustling streets"
+  },
+  "space": {
+    "name": "Space Station",
+    "baseTile": "metalFloor",
+    "pathTile": "corridor",
+    "obstacleTiles": ["console", "crate", "vent"],
+    "colors": {
+      "base": "#3f3f46",
+      "path": "#71717a",
+      "obstacles": ["#1e293b", "#92400e", "#27272a"]
+    },
+    "atmosphere": "High-tech space station with metallic corridors and blinking consoles"
+  }
+}

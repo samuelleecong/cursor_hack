@@ -6,6 +6,8 @@
 import {Room, GameObject, Item, StoryMode} from '../types';
 import {generateTileMap, BiomeType} from './mapGenerator';
 import {generateSingleRoomScene} from './sceneImageGenerator';
+import {getOrGenerateBiome} from './biomeService';
+import {BiomeDefinition} from '../types/biomes';
 
 const ENEMY_SPRITES = ['👹', '👻', '🧟', '🐺', '🦇', '🕷️', '🐍'];
 const NPC_SPRITES = ['👨', '👩', '🧙', '🧙‍♀️', '🧝', '🧝‍♀️', '👴', '👵'];
@@ -117,8 +119,8 @@ export async function generateRoom(
   roomId: string,
   storySeed: number,
   roomNumber: number,
-  previousRoomType?: string,
-  storyContext?: string | null,
+  biomeKey: string,
+  storyContext: string | null,
   storyMode?: StoryMode,
   previousRoomDescription?: string,
   generateSceneImage: boolean = true, // Flag to control scene generation
@@ -133,16 +135,11 @@ export async function generateRoom(
     };
   })();
 
-  // Determine biome based on room number
-  let biome: BiomeType = 'forest';
-  if (roomNumber < 3) biome = 'forest';
-  else if (roomNumber < 6) biome = 'plains';
-  else if (roomNumber < 10) biome = 'desert';
-  else if (roomNumber < 15) biome = 'cave';
-  else biome = 'dungeon';
+  // Get or generate biome definition dynamically
+  const biomeDefinition = await getOrGenerateBiome(biomeKey, storyContext);
 
-  // Generate tile map with proper pathways
-  const tileMap = generateTileMap(roomId, storySeed, roomNumber, biome);
+  // Generate tile map with dynamic biome definition
+  const tileMap = generateTileMap(roomId, storySeed, roomNumber, undefined, biomeDefinition);
 
   const objects: GameObject[] = [];
 
@@ -152,29 +149,23 @@ export async function generateRoom(
 
   // Generate description based on room type and biome
   let description = '';
-  const biomeNames = {
-    forest: 'Forest Path',
-    plains: 'Open Plains',
-    desert: 'Desert Trail',
-    cave: 'Dark Cavern',
-    dungeon: 'Ancient Dungeon',
-  };
+  const biomeName = biomeDefinition.name;
 
   switch (roomType) {
     case 'combat':
-      description = `⚔️ ${biomeNames[biome]} - Danger Ahead`;
+      description = `⚔️ ${biomeName} - Danger Ahead`;
       break;
     case 'peaceful':
-      description = `🌿 ${biomeNames[biome]} - Safe Haven`;
+      description = `🌿 ${biomeName} - Safe Haven`;
       break;
     case 'treasure':
-      description = `✨ ${biomeNames[biome]} - Treasure Found`;
+      description = `✨ ${biomeName} - Treasure Found`;
       break;
     case 'puzzle':
-      description = `🧩 ${biomeNames[biome]} - Mysterious Place`;
+      description = `🧩 ${biomeName} - Mysterious Place`;
       break;
     case 'mixed':
-      description = `🌍 ${biomeNames[biome]} - Adventure Awaits`;
+      description = `🌍 ${biomeName} - Adventure Awaits`;
       break;
   }
 
@@ -266,7 +257,7 @@ export async function generateRoom(
       sceneImage = await generateSingleRoomScene({
         roomId,
         roomNumber,
-        biome,
+        biome: biomeKey,
         description,
         objects,
         storyContext,

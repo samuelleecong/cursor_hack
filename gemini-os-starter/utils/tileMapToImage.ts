@@ -93,6 +93,7 @@ export function tileMapToReferenceImage(tileMap: TileMap): string {
 
 /**
  * Convert tile map to a Blob for efficient upload to fal.ai
+ * ENHANCED: Creates a PURE PATH MASK for exact layout adherence
  */
 export async function tileMapToBlob(tileMap: TileMap): Promise<Blob> {
   const canvas = document.createElement('canvas');
@@ -108,44 +109,56 @@ export async function tileMapToBlob(tileMap: TileMap): Promise<Blob> {
   canvas.width = mapWidth;
   canvas.height = mapHeight;
 
-  // Same rendering logic as tileMapToReferenceImage
+  // PURE BLACK BACKGROUND - maximizes path contrast
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, mapWidth, mapHeight);
+
+  // ULTRA-BRIGHT PATH - only thing that matters
+  // Use PURE YELLOW (#FFFF00) for maximum visibility
+  ctx.fillStyle = '#FFFF00';
+
+  // Draw walkable tiles as solid yellow
   for (let y = 0; y < tileMap.height; y++) {
     for (let x = 0; x < tileMap.width; x++) {
       const tile = tileMap.tiles[y][x];
-      const tileX = x * tileMap.tileSize;
-      const tileY = y * tileMap.tileSize;
-
       if (tile.walkable) {
-        ctx.fillStyle = '#FFD700';
-      } else {
-        ctx.fillStyle = '#222222';
+        const tileX = x * tileMap.tileSize;
+        const tileY = y * tileMap.tileSize;
+        ctx.fillRect(tileX, tileY, tileMap.tileSize, tileMap.tileSize);
       }
-
-      ctx.fillRect(tileX, tileY, tileMap.tileSize, tileMap.tileSize);
     }
   }
 
-  // Highlight path
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
-  tileMap.pathPoints.forEach((point) => {
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, tileMap.tileSize * 0.8, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  // Draw path outline
+  // SUPER-THICK PATH OUTLINE for absolute clarity
+  // This is the SACRED LAYOUT that must be preserved
   if (tileMap.pathPoints.length > 1) {
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = tileMap.tileSize * 1.5;
+    ctx.strokeStyle = '#FFFF00';
+    ctx.lineWidth = tileMap.tileSize * 2.0; // Increased from 1.5 to 2.0
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.shadowColor = '#FFFF00';
+    ctx.shadowBlur = 20; // Add glow for emphasis
+
     ctx.beginPath();
     ctx.moveTo(tileMap.pathPoints[0].x, tileMap.pathPoints[0].y);
     for (let i = 1; i < tileMap.pathPoints.length; i++) {
       ctx.lineTo(tileMap.pathPoints[i].x, tileMap.pathPoints[i].y);
     }
     ctx.stroke();
+
+    // Reset shadow
+    ctx.shadowBlur = 0;
   }
+
+  // Overlay path points with BRIGHT circles (no transparency)
+  ctx.fillStyle = '#FFFF00';
+  tileMap.pathPoints.forEach((point) => {
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, tileMap.tileSize * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  console.log(`[TileMapToImage] Created PURE PATH MASK: ${tileMap.pathPoints.length} path points, pure black background with bright yellow path`);
 
   // Convert canvas to Blob (more efficient than data URL)
   return new Promise<Blob>((resolve, reject) => {
@@ -197,8 +210,9 @@ export function resizeTileMapReference(
 }
 
 /**
- * Combine two tile maps side-by-side into a panorama reference (2000x800)
+ * Combine two tile maps side-by-side into a panorama PURE PATH MASK (2000x800)
  * Left half = current room, Right half = next room
+ * ENHANCED: Creates pure black/yellow path mask for maximum layout adherence
  */
 export function combineTileMapsAsPanorama(
   currentTileMap: TileMap,
@@ -215,44 +229,75 @@ export function combineTileMapsAsPanorama(
   canvas.width = 2000;
   canvas.height = 800;
 
-  // Generate both tile map images
-  const currentImage = tileMapToReferenceImage(currentTileMap);
-  const nextImage = tileMapToReferenceImage(nextTileMap);
+  // PURE BLACK BACKGROUND
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, 2000, 800);
 
-  // Load and draw both images side by side
-  return new Promise<string>((resolve, reject) => {
-    const currentImg = new Image();
-    const nextImg = new Image();
-    let loadedCount = 0;
+  console.log('[CombinePanorama] Drawing left tile map (0-1000px)...');
+  // Draw LEFT tile map (current room) at 0-1000px
+  drawPurePathMask(ctx, currentTileMap, 0, 0);
 
-    const onBothLoaded = () => {
-      loadedCount++;
-      if (loadedCount === 2) {
-        // Draw current map on left half (0, 0, 1000, 800)
-        ctx.drawImage(currentImg, 0, 0, 1000, 800);
+  console.log('[CombinePanorama] Drawing right tile map (1000-2000px)...');
+  // Draw RIGHT tile map (next room) at 1000-2000px
+  drawPurePathMask(ctx, nextTileMap, 1000, 0);
 
-        // Draw next map on right half (1000, 0, 1000, 800)
-        ctx.drawImage(nextImg, 1000, 0, 1000, 800);
+  console.log('[CombinePanorama] Panorama pure path mask created: 2000x800');
 
-        // Add a subtle divider line
-        ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(1000, 0);
-        ctx.lineTo(1000, 800);
-        ctx.stroke();
+  // Convert to data URL
+  return canvas.toDataURL('image/png');
+}
 
-        resolve(canvas.toDataURL('image/png'));
+/**
+ * Helper: Draw a pure path mask on canvas at specified offset
+ */
+function drawPurePathMask(
+  ctx: CanvasRenderingContext2D,
+  tileMap: TileMap,
+  offsetX: number,
+  offsetY: number
+): void {
+  const mapWidth = tileMap.width * tileMap.tileSize;
+  const mapHeight = tileMap.height * tileMap.tileSize;
+
+  // ULTRA-BRIGHT PATH - Pure Yellow
+  ctx.fillStyle = '#FFFF00';
+
+  // Draw walkable tiles as solid yellow
+  for (let y = 0; y < tileMap.height; y++) {
+    for (let x = 0; x < tileMap.width; x++) {
+      const tile = tileMap.tiles[y][x];
+      if (tile.walkable) {
+        const tileX = offsetX + (x * tileMap.tileSize);
+        const tileY = offsetY + (y * tileMap.tileSize);
+        ctx.fillRect(tileX, tileY, tileMap.tileSize, tileMap.tileSize);
       }
-    };
+    }
+  }
 
-    currentImg.onload = onBothLoaded;
-    nextImg.onload = onBothLoaded;
+  // SUPER-THICK PATH OUTLINE
+  if (tileMap.pathPoints.length > 1) {
+    ctx.strokeStyle = '#FFFF00';
+    ctx.lineWidth = tileMap.tileSize * 2.0;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#FFFF00';
+    ctx.shadowBlur = 20;
 
-    currentImg.onerror = () => reject(new Error('Failed to load current tile map'));
-    nextImg.onerror = () => reject(new Error('Failed to load next tile map'));
+    ctx.beginPath();
+    ctx.moveTo(offsetX + tileMap.pathPoints[0].x, offsetY + tileMap.pathPoints[0].y);
+    for (let i = 1; i < tileMap.pathPoints.length; i++) {
+      ctx.lineTo(offsetX + tileMap.pathPoints[i].x, offsetY + tileMap.pathPoints[i].y);
+    }
+    ctx.stroke();
 
-    currentImg.src = currentImage;
-    nextImg.src = nextImage;
-  }) as any; // Type workaround for Promise return
+    ctx.shadowBlur = 0;
+  }
+
+  // Overlay path points with BRIGHT circles
+  ctx.fillStyle = '#FFFF00';
+  tileMap.pathPoints.forEach((point) => {
+    ctx.beginPath();
+    ctx.arc(offsetX + point.x, offsetY + point.y, tileMap.tileSize * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }

@@ -189,15 +189,41 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
     return null;
   }
 
+  // Export music state and controls for use in other components
+  (window as any).__gameMusicState = {
+    musicEnabled,
+    volume,
+    isPlaying,
+    isLoading,
+    currentTrack,
+    error,
+    toggleMusic,
+    handleVolumeChange,
+  };
+
   return (
     <>
       {/* Autoplay blocked banner */}
       {error && error.includes('autoplay') && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
-          <div className="bg-purple-900/95 backdrop-blur border-2 border-purple-400 rounded-lg px-6 py-3 shadow-2xl">
+        <div
+          className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50"
+          style={{
+            fontFamily: 'monospace',
+            animation: 'bounce 1s infinite'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#f4e8d0',
+              border: '4px solid #3d2817',
+              borderRadius: '4px',
+              padding: '12px 20px',
+              boxShadow: '0 6px 0 #3d2817, inset 0 3px 0 #fff9e8'
+            }}
+          >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🎵</span>
-              <div className="text-white font-semibold">
+              <span style={{ fontSize: '20px' }}>🎵</span>
+              <div style={{ color: '#3d2817', fontWeight: 'bold', fontSize: '12px' }}>
                 Click anywhere to start music!
               </div>
             </div>

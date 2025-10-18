@@ -107,8 +107,8 @@ export async function generatePixelArt(params: ImageGenerationParams): Promise<G
     useNanoBanana = false // Default to Flux for backward compatibility
   } = params;
 
-  // Build full prompt with pixel art styling
-  const fullPrompt = `${prompt}, ${PIXEL_ART_STYLE}`;
+  // Build full prompt with pixel art styling and mask interpretation instructions
+  let fullPrompt = `${prompt}, ${PIXEL_ART_STYLE}`;
 
   const dimensions = customDimensions || getImageSize(type, size);
 
@@ -128,6 +128,20 @@ export async function generatePixelArt(params: ImageGenerationParams): Promise<G
       if (referencesToProcess) {
         // Image-to-Image with Nano Banana (supports multiple references)
         console.log(`[falService] Nano Banana img2img with ${referencesToProcess.length} reference image(s)`);
+        console.log(`[falService] Image strength set to ${imageStrength} for layout preservation`);
+
+        // Add mask interpretation instructions to prompt
+        fullPrompt = `${fullPrompt}
+
+CRITICAL REFERENCE IMAGE INTERPRETATION:
+The reference image is a LAYOUT MASK where:
+- BRIGHT YELLOW areas (#FFD700) = WALKABLE PATHS that MUST be replaced with appropriate terrain (dirt paths, stone walkways, grass trails, wooden bridges, or other biome-appropriate walkable surfaces matching the scene's style and color palette)
+- BLACK areas = NON-WALKABLE TERRAIN that should become obstacles, vegetation, or environmental features appropriate to the biome
+- DO NOT keep the yellow color - replace it with natural, biome-appropriate path materials
+- The path layout (shape/position) must be preserved EXACTLY, but the yellow should become realistic terrain
+- Example: Forest = dirt path with moss edges; Desert = sandy trail; Dungeon = stone floor; Cave = smooth rock path`;
+
+        console.log(`[falService] Enhanced prompt with mask interpretation instructions`);
 
         // Upload all Blobs and collect URLs
         const imageUrls: string[] = [];
@@ -142,16 +156,20 @@ export async function generatePixelArt(params: ImageGenerationParams): Promise<G
           }
         }
 
-        console.log(`[falService] Using ${imageUrls.length} reference images for dual anchor system`);
+        console.log(`[falService] Using ${imageUrls.length} reference images for layout anchor system`);
+        console.log(`[falService] Reference images are PURE PATH MASKS (yellow on black)`);
 
         result = await fal.subscribe('fal-ai/gemini-25-flash-image/edit', {
           input: {
             prompt: fullPrompt,
-            image_urls: imageUrls, // Multiple references for anchoring
+            image_urls: imageUrls, // Layout references (path masks)
             aspect_ratio: aspectRatio,
             num_images: 1,
+            // Note: Nano Banana's /edit endpoint doesn't expose strength directly
+            // It uses image_urls as composition anchors with high adherence by default
+            // The prompt contains explicit instructions for layout preservation
           },
-          logs: false,
+          logs: true, // Enable logs to see Nano Banana's interpretation
           onQueueUpdate: (update) => {
             if (update.status === 'IN_PROGRESS') {
               console.log(`Nano Banana generating ${type}: ${update.logs?.map(l => l.message).join(' ')}`);

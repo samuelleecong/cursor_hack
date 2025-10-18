@@ -17,9 +17,10 @@ import { BattleSceneData, VisualBattleScene } from './components/VisualBattleSce
 import { Window } from './components/Window';
 import { INITIAL_MAX_HISTORY_LENGTH } from './constants';
 import { generateCharacterClasses } from './services/classGenerator';
-import { streamAppContent } from './services/geminiService';
+import { streamAppContent, generateBiomeProgression } from './services/geminiService';
 import { generateRoom } from './services/roomGenerator';
 import { generateRoomPair } from './services/roomPairGenerator';
+import { eventLogger } from './services/eventLogger';
 import {
   BattleAnimation,
   BattleState,
@@ -36,6 +37,9 @@ import { SpeechButton } from './components/SpeechButton';
 
 // Track rooms currently being generated to prevent duplicate calls
 const generatingRooms = new Set<string>();
+
+// Track promises for rooms being generated (so we can await them)
+const roomGenerationPromises = new Map<string, Promise<Room>>();
 
 // Utility Functions
 const calculateDamage = (
@@ -60,7 +64,10 @@ const calculateLevelUp = (currentLevel: number): number => {
 };
 
 const App: React.FC = () => {
-  // Track whether to show story input screen
+  useEffect(() => {
+    (window as any).eventLogger = eventLogger;
+  }, []);
+
   const [showStoryInput, setShowStoryInput] = useState<boolean>(true);
   const [isGeneratingClasses, setIsGeneratingClasses] = useState<boolean>(false);
   const [availableClasses, setAvailableClasses] = useState<CharacterClass[]>(CHARACTER_CLASSES);
@@ -79,6 +86,7 @@ const App: React.FC = () => {
     storySeed: Math.floor(Math.random() * 10000),
     storyContext: null,
     storyMode: 'inspiration',
+    biomeProgression: [],
     isInGame: false,
     playerPosition: {x: 400, y: 300},
     currentRoomId: 'room_0',
@@ -100,21 +108,35 @@ const App: React.FC = () => {
 
   // Handle story input submission
   const handleStorySubmit = useCallback(async (story: string | null, mode: 'inspiration' | 'recreation' | 'continuation') => {
-    setGameState((prev) => ({
-      ...prev,
-      storyContext: story,
-      storyMode: mode,
-    }));
     setShowStoryInput(false);
-
-    // Generate character classes based on story and mode
     setIsGeneratingClasses(true);
+
     try {
+      // Generate biome progression based on story context
+      const biomeProgression = await generateBiomeProgression(story, mode, 20);
+
+      // Generate character classes based on story and mode
       const generatedClasses = await generateCharacterClasses(story, mode);
+
+      // Update game state with story context and biome progression
+      setGameState((prev) => ({
+        ...prev,
+        storyContext: story,
+        storyMode: mode,
+        biomeProgression: biomeProgression,
+      }));
+
       setAvailableClasses(generatedClasses);
     } catch (error) {
-      console.error('Failed to generate classes:', error);
+      console.error('Failed to generate game content:', error);
       setAvailableClasses(CHARACTER_CLASSES); // Fallback to defaults
+      // Fallback biome progression
+      setGameState((prev) => ({
+        ...prev,
+        storyContext: story,
+        storyMode: mode,
+        biomeProgression: Array(20).fill('forest'),
+      }));
     } finally {
       setIsGeneratingClasses(false);
     }
@@ -126,6 +148,12 @@ const App: React.FC = () => {
       setIsLoading(true);
       console.log('[App] Generating initial room pair (0 + 1)...');
 
+      const biomeKey0 = gameState.biomeProgression[0] || 'forest';
+      const biomeKey1 = gameState.biomeProgression[1] || 'forest';
+
+      // Initialize event logger
+      eventLogger.initialize(character.name, gameState.storySeed);
+
       // Generate room 0 and room 1 together with panorama scene
       const { currentRoom: room0, nextRoom: room1 } = await generateRoomPair(
         'room_0',
@@ -133,6 +161,8 @@ const App: React.FC = () => {
         gameState.storySeed,
         0,
         1,
+        biomeKey0,
+        biomeKey1,
         gameState.storyContext,
         gameState.storyMode
       );
@@ -146,6 +176,16 @@ const App: React.FC = () => {
 
       // Set player spawn position from tile map
       const spawnPosition = room0.tileMap?.spawnPoint || {x: 400, y: 300};
+
+      // Log initial room entry
+      eventLogger.logEvent(
+        'room_entered',
+        'room_0',
+        1,
+        character.startingHP,
+        `Started adventure in ${biomeKey0} as ${character.name}`,
+        { biome: biomeKey0 }
+      );
 
       setGameState((prev) => ({
         ...prev,
@@ -173,7 +213,8 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [gameState.storySeed, gameState.storyContext, gameState.storyMode]);
+  }, [gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression]);
+
 
   // Handle player movement
   const handlePlayerMove = useCallback((newPosition: Position) => {
@@ -186,24 +227,64 @@ const App: React.FC = () => {
       const newRoomCounter = gameState.roomCounter + 1;
       const newRoomId = `room_${newRoomCounter}`;
 
+      // Get biome for this room from progression
+      const biomeKey = gameState.biomeProgression[newRoomCounter] || 'forest';
+
       // Check if room already exists (pre-generated)
       let newRoom = gameState.rooms.get(newRoomId);
 
       if (!newRoom) {
-        // Room not pre-generated, generate it now
-        console.log(`[App] Room ${newRoomId} not pre-generated, generating now...`);
-        const currentRoom = gameState.rooms.get(gameState.currentRoomId);
+        // Check if room is currently being generated in background
+        const generationPromise = roomGenerationPromises.get(newRoomId);
 
-        newRoom = await generateRoom(
-          newRoomId,
-          gameState.storySeed,
-          newRoomCounter,
-          undefined,
-          gameState.storyContext,
-          gameState.storyMode,
-          currentRoom?.description
-        );
+        if (generationPromise) {
+          console.log(`[App] Room ${newRoomId} is being generated, waiting for completion...`);
+
+          try {
+            // Wait for the ongoing generation to complete
+            newRoom = await generationPromise;
+            console.log(`[App] Room ${newRoomId} generation completed, using pre-generated room`);
+          } catch (error) {
+            console.error(`[App] Pre-generation failed for ${newRoomId}, falling back to single room generation:`, error);
+            // Fallback: generate single room
+            const currentRoom = gameState.rooms.get(gameState.currentRoomId);
+            newRoom = await generateRoom(
+              newRoomId,
+              gameState.storySeed,
+              newRoomCounter,
+              biomeKey,
+              gameState.storyContext,
+              gameState.storyMode,
+              currentRoom?.description
+            );
+          }
+        } else {
+          // Room not pre-generated and not being generated, generate it now
+          console.log(`[App] Room ${newRoomId} not pre-generated, generating now...`);
+          const currentRoom = gameState.rooms.get(gameState.currentRoomId);
+
+          newRoom = await generateRoom(
+            newRoomId,
+            gameState.storySeed,
+            newRoomCounter,
+            biomeKey,
+            gameState.storyContext,
+            gameState.storyMode,
+            currentRoom?.description
+          );
+        }
       }
+
+      // Log room entry
+      eventLogger.logEvent(
+        'room_entered',
+        newRoomId,
+        gameState.level,
+        gameState.currentHP,
+        `Entered new room: ${newRoom.description}`,
+        { biome: biomeKey, direction }
+      );
+
 
       const tileMap = newRoom.tileMap;
       let newPosition = tileMap?.spawnPoint || { x: 400, y: 300 };
@@ -275,16 +356,32 @@ const App: React.FC = () => {
         generatingRooms.add(nextRoomId);
         generatingRooms.add(nextNextRoomId);
 
-        generateRoomPair(
+        const nextBiomeKey = gameState.biomeProgression[nextRoomCounter] || 'forest';
+        const nextNextBiomeKey = gameState.biomeProgression[nextNextRoomCounter] || 'forest';
+
+        // Create the main generation promise
+        const pairGenerationPromise = generateRoomPair(
           nextRoomId,
           nextNextRoomId,
           gameState.storySeed,
           nextRoomCounter,
           nextNextRoomCounter,
+          nextBiomeKey,
+          nextNextBiomeKey,
           gameState.storyContext,
           gameState.storyMode,
           newRoom?.description
-        ).then(({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
+        );
+
+        // Store individual room promises (they resolve when the pair is generated)
+        const nextRoomPromise = pairGenerationPromise.then(({ currentRoom }) => currentRoom);
+        const nextNextRoomPromise = pairGenerationPromise.then(({ nextRoom }) => nextRoom);
+
+        roomGenerationPromises.set(nextRoomId, nextRoomPromise);
+        roomGenerationPromises.set(nextNextRoomId, nextNextRoomPromise);
+
+        // Handle completion
+        pairGenerationPromise.then(({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
           setGameState((prev) => {
             const newRooms = new Map(prev.rooms);
             newRooms.set(nextRoomId, nextRoom);
@@ -293,15 +390,19 @@ const App: React.FC = () => {
           });
           console.log(`[App] Room pair ${nextRoomId} + ${nextNextRoomId} pre-generated successfully`);
 
-          // Remove from generating set
+          // Remove from tracking sets
           generatingRooms.delete(nextRoomId);
           generatingRooms.delete(nextNextRoomId);
+          roomGenerationPromises.delete(nextRoomId);
+          roomGenerationPromises.delete(nextNextRoomId);
         }).catch((error) => {
           console.error(`[App] Failed to pre-generate room pair:`, error);
 
-          // Remove from generating set on error too
+          // Remove from tracking sets on error too
           generatingRooms.delete(nextRoomId);
           generatingRooms.delete(nextNextRoomId);
+          roomGenerationPromises.delete(nextRoomId);
+          roomGenerationPromises.delete(nextNextRoomId);
         });
       } else if (roomsAlreadyExist) {
         console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already exist, skipping pre-generation`);
@@ -309,7 +410,7 @@ const App: React.FC = () => {
         console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already being generated, skipping duplicate call`);
       }
     },
-    [gameState.roomCounter, gameState.rooms, gameState.currentRoomId, gameState.storySeed, gameState.storyContext, gameState.storyMode],
+    [gameState.roomCounter, gameState.rooms, gameState.currentRoomId, gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression, gameState.level, gameState.currentHP],
   );
 
   // Handle adding experience and leveling up
@@ -421,8 +522,16 @@ const App: React.FC = () => {
   // Handle object interaction
   const handleObjectInteract = useCallback(
     (object: GameObject) => {
-      if (object.type === 'enemy') {
-        // Start a battle
+    if (object.type === 'enemy') {
+        eventLogger.logEvent(
+          'battle_start',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Started battle with ${object.interactionText}`,
+          { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
+        );
+
         setGameState(prev => ({
           ...prev,
           battleState: {
@@ -436,10 +545,17 @@ const App: React.FC = () => {
           }
         }));
       } else {
-        // Handle other interactions (NPCs, items)
+        eventLogger.logEvent(
+          'npc_interaction',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Interacted with ${object.interactionText}`,
+          { npcId: object.id, npcName: object.interactionText }
+        );
+
         setCurrentInteractingObject(object);
 
-        // Mark object as interacted
         setGameState((prev) => {
           const room = prev.rooms.get(prev.currentRoomId);
           if (!room) return prev;
@@ -522,6 +638,16 @@ const App: React.FC = () => {
           type: consequenceType,
           timestamp: Date.now(),
         };
+        
+        eventLogger.logEvent(
+          'choice',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Made choice: ${choiceText}`,
+          { choiceId, choiceText, consequenceType }
+        );
+
         setGameState((prev) => ({
           ...prev,
           storyConsequences: [...prev.storyConsequences, consequence],
@@ -534,6 +660,16 @@ const App: React.FC = () => {
       if (choiceType === 'combat' || choiceType === 'damage') {
         const damage = value || 10;
         newHP = Math.max(0, gameState.currentHP - damage);
+        
+        eventLogger.logEvent(
+          'combat',
+          gameState.currentRoomId,
+          gameState.level,
+          newHP,
+          choiceText,
+          { choiceId, choiceType, damageTaken: damage }
+        );
+
         setGameState((prev) => ({
           ...prev,
           currentHP: newHP,
@@ -560,6 +696,15 @@ const App: React.FC = () => {
           },
         }));
       } else if (choiceType === 'loot') {
+        eventLogger.logEvent(
+          'loot',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          choiceText,
+          { choiceId, choiceType }
+        );
+
         setGameState((prev) => ({
           ...prev,
           currentAnimation: {
@@ -569,6 +714,15 @@ const App: React.FC = () => {
           },
         }));
       } else if (choiceType === 'dialogue') {
+        eventLogger.logEvent(
+          'dialogue',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          choiceText,
+          { choiceId, choiceType }
+        );
+
         setGameState((prev) => ({
           ...prev,
           currentAnimation: {
@@ -716,11 +870,36 @@ const App: React.FC = () => {
         const enemyLevel = gameState.battleState.enemy.enemyLevel || 1;
         const xpGained = calculateExperienceGain(enemyLevel, gameState.level);
 
+        eventLogger.logEvent(
+          'battle_end',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Defeated ${gameState.battleState.enemy.interactionText}`,
+          { 
+            enemyId: gameState.battleState.enemy.id,
+            enemyName: gameState.battleState.enemy.interactionText,
+            damageDealt: playerDamage,
+            xpGained 
+          }
+        );
+
         setTimeout(() => {
           handleAddExperience(xpGained);
 
-          // Check for item drop
           if (gameState.battleState?.enemy.itemDrop) {
+            eventLogger.logEvent(
+              'item_acquired',
+              gameState.currentRoomId,
+              gameState.level,
+              gameState.currentHP,
+              `Found ${gameState.battleState.enemy.itemDrop.name}`,
+              { 
+                itemId: gameState.battleState.enemy.itemDrop.id,
+                itemName: gameState.battleState.enemy.itemDrop.name 
+              }
+            );
+
             setGameState(prev => ({
               ...prev,
               inventory: [...prev.inventory, gameState.battleState!.enemy.itemDrop!],
@@ -833,6 +1012,7 @@ const App: React.FC = () => {
   // Restart game
   const handleRestart = useCallback(() => {
     const newSeed = Math.floor(Math.random() * 10000);
+    eventLogger.reset();
     setGameState({
       selectedCharacter: null,
       currentHP: 0,
@@ -846,6 +1026,7 @@ const App: React.FC = () => {
       storySeed: newSeed,
       storyContext: null,
       storyMode: 'inspiration',
+      biomeProgression: [],
       isInGame: false,
       playerPosition: {x: 400, y: 300},
       currentRoomId: 'room_0',
@@ -861,7 +1042,7 @@ const App: React.FC = () => {
     setInteractionHistory([]);
     setShowAIDialog(false);
     setCurrentInteractingObject(null);
-    setAvailableClasses(CHARACTER_CLASSES); // Reset to default classes
+    setAvailableClasses(CHARACTER_CLASSES);
     setShowStoryInput(true);
   }, []);
 

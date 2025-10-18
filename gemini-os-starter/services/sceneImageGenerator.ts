@@ -30,7 +30,8 @@ export interface SceneGenerationParams {
 }
 
 /**
- * Build a prompt for Gemini to generate scene description/prompt
+ * Build a prompt for Gemini to generate STYLE-ONLY description
+ * LAYOUT is handled 100% by the reference image
  */
 function buildScenePromptRequest(params: SceneGenerationParams): string {
   const {
@@ -43,74 +44,71 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     previousRoomDescription,
   } = params;
 
-  // Biome descriptions
+  // Biome descriptions - STYLE ONLY, no layout
   const biomeDescriptions: Record<BiomeType, string> = {
-    forest: 'lush forest with ancient trees, moss-covered stones, and winding paths',
-    plains: 'open grasslands with rolling hills, wildflowers, and distant mountains',
-    desert: 'sandy dunes with scattered cacti, rocky outcrops, and heat haze',
-    cave: 'dark cavern with stalactites, underground pools, and glowing crystals',
-    dungeon: 'ancient stone corridors with torches, crumbling walls, and mysterious doors',
+    forest: 'lush forest with ancient trees, moss-covered stones, dappled sunlight filtering through leaves',
+    plains: 'open grasslands with rolling hills, wildflowers, and distant mountains in soft focus',
+    desert: 'sandy terrain with scattered cacti, rocky outcrops, and shimmering heat haze',
+    cave: 'dark cavern with stalactites, underground pools, and glowing crystals casting ethereal light',
+    dungeon: 'ancient stone corridors with flickering torches, crumbling walls, and mysterious shadows',
   };
 
-  // Summarize objects in the room
+  // Summarize objects - VISUAL STYLE, not placement
   const enemies = objects.filter((o) => o.type === 'enemy');
   const npcs = objects.filter((o) => o.type === 'npc');
   const items = objects.filter((o) => o.type === 'item');
 
-  let objectHints = '';
+  let atmosphereHints = '';
   if (enemies.length > 0) {
-    objectHints += `Dangerous creatures lurking (${enemies.map(e => e.sprite).join(', ')}). `;
+    atmosphereHints += `Dangerous, ominous atmosphere with threatening presence. `;
   }
   if (npcs.length > 0) {
-    objectHints += `Travelers or inhabitants present (${npcs.map(n => n.sprite).join(', ')}). `;
+    atmosphereHints += `Signs of civilization and friendly inhabitants. `;
   }
   if (items.length > 0) {
-    objectHints += `Treasures or items scattered about (${items.map(i => i.sprite).join(', ')}). `;
+    atmosphereHints += `Hints of treasure and discovery. `;
   }
 
-  // Story context integration
+  // Story context integration - THEME ONLY
   let storySection = '';
   if (storyContext) {
     const modeInstructions: Record<StoryMode, string> = {
-      recreation: 'Recreate locations and atmosphere from the story',
-      continuation: 'Show how the world has evolved after the story events',
-      inspiration: 'Capture the themes and atmosphere of the story',
+      recreation: 'Match the visual style and atmosphere from the original story',
+      continuation: 'Show a world that has aged and evolved, with weathering and change',
+      inspiration: 'Capture the color palette, mood, and aesthetic themes',
     };
 
     storySection = `
-STORY CONTEXT (${storyMode || 'inspiration'} mode):
-${storyContext.substring(0, 500)}...
+STORY THEME (${storyMode || 'inspiration'} mode):
+${storyContext.substring(0, 400)}...
 ${modeInstructions[storyMode || 'inspiration']}
 `;
   }
 
-  // Previous room context
-  let previousContext = '';
-  if (previousRoomDescription) {
-    previousContext = `\nCONTINUITY: The player just came from: ${previousRoomDescription}`;
-  }
-
-  return `You are a creative prompt generator for pixel art game scenes.
+  return `You are a visual style consultant for pixel art game scenes.
 
 ${storySection}
 
-CURRENT LOCATION (Room ${roomNumber}):
-${description}
-Environment: ${biomeDescriptions[biome]}
-${objectHints}${previousContext}
+SCENE: Room ${roomNumber} - ${description}
+BIOME STYLE: ${biomeDescriptions[biome]}
+ATMOSPHERE: ${atmosphereHints || 'peaceful, serene environment'}
+${previousRoomDescription ? `CONTINUITY: Maintains visual consistency with previous area: ${previousRoomDescription}` : ''}
 
-Generate a detailed, vivid prompt for creating a beautiful pixel art scene image. The prompt should describe:
-- The ${biome} environment in rich visual detail
-- **CRITICAL**: A GOLDEN/YELLOW dirt path or walkable trail EXACTLY matching the reference image's bright path layout
-- The path must run from left (entrance) to right (exit) following the EXACT route shown in the reference
-- The atmosphere (peaceful, dangerous, mysterious, etc.)
-- Visual elements that hint at: ${objectHints || 'a serene, empty area'}
-- Lighting, colors, and mood appropriate for the scene
-- Make it feel like a classic top-down 16-bit RPG scene
+Generate a STYLE-ONLY prompt for pixel art scene generation. Focus EXCLUSIVELY on:
+- Color palette (what colors dominate the scene?)
+- Texture and materials (grass, stone, wood, water, etc.)
+- Lighting and mood (bright, dark, mysterious, welcoming?)
+- Atmospheric effects (fog, sunbeams, shadows, particle effects?)
+- Art style consistency (16-bit RPG, Stardew Valley aesthetic, retro gaming)
 
-**CRITICAL INSTRUCTION**: The visual path in your scene MUST EXACTLY follow the bright yellow/gold path shown in the reference image. Do not deviate from this path layout. The walkable area should be clearly visible as a dirt trail, stone path, or similar walkable surface that matches the reference image's path shape.
+DO NOT mention:
+- Path layout, routes, or directions
+- Spatial positioning or geographic layout
+- Object placement or location
 
-IMPORTANT: Output ONLY the image generation prompt, nothing else. Make it detailed and vivid, emphasizing the path following the reference. 2-3 sentences maximum.`;
+The reference image will handle ALL layout. Your prompt is for ARTISTIC STYLE ONLY.
+
+Output format: Single paragraph, 2-3 sentences, STYLE ONLY.`;
 }
 
 /**
@@ -167,16 +165,26 @@ export async function generateSingleRoomScene(
       }
     }
 
-    // Now use fal.ai to generate the actual image
-    console.log(`[SceneGen] Generating image via fal.ai for room ${roomId}${referenceImage ? ' (with tile map Blob reference)' : ''}...`);
+    // Now use fal.ai to generate the actual image with EXPLICIT layout preservation
+    console.log(`[SceneGen] Generating image via fal.ai for room ${roomId}${referenceImage ? ' (with PURE PATH MASK reference)' : ''}...`);
+
+    // Build composition-aware prompt with explicit instructions
+    const compositionPrompt = `${imagePrompt}
+
+CRITICAL COMPOSITION RULE:
+The reference image shows a YELLOW PATH on BLACK background. This path layout is SACRED and IMMUTABLE.
+Preserve the EXACT path coordinates while applying the artistic style described above.
+The yellow areas in the reference = walkable path (dirt trail, stone path, wooden planks, etc.).
+The black areas in the reference = obstacles/decoration (trees, rocks, water, walls, etc.).
+DO NOT move, bend, or reshape the path. ONLY stylize it.`;
 
     const generatedImage = await generatePixelArt({
-      prompt: imagePrompt,
+      prompt: compositionPrompt,
       type: 'scene',
       customDimensions: { width: 1000, height: 800 },
-      referenceImage: referenceImage, // Pass Blob directly - fal.ai auto-uploads
-      imageStrength: 0.85, // 85% adherence to reference - MUST follow the path layout closely
-      useNanoBanana: true, // Use Gemini 2.5 Flash Image for superior path understanding
+      referenceImage: referenceImage, // Pure path mask Blob
+      imageStrength: 0.98, // 98% adherence - MAXIMUM without being image copy (was 0.85)
+      useNanoBanana: true, // Gemini 2.5 Flash Image understands composition better
     });
 
     console.log(`[SceneGen] Scene image generated successfully for room ${roomId}`);
@@ -237,36 +245,47 @@ export async function generateScenePanorama(
     currentImagePrompt = currentImagePrompt.trim();
     nextImagePrompt = nextImagePrompt.trim();
 
-    // Combine prompts for panorama
-    const panoramaPrompt = `${currentImagePrompt} [LEFT SIDE] seamlessly connected to ${nextImagePrompt} [RIGHT SIDE], continuous path from left to right, unified landscape`;
+    // Combine prompts for panorama - STYLE ONLY
+    const panoramaStylePrompt = `LEFT SECTION: ${currentImagePrompt} | RIGHT SECTION: ${nextImagePrompt}
+Seamlessly blended artistic styles with unified lighting and color harmony. Natural visual transition between areas.`;
 
-    console.log(`[SceneGen] Panorama prompt: ${panoramaPrompt.substring(0, 200)}...`);
+    console.log(`[SceneGen] Panorama style prompt: ${panoramaStylePrompt.substring(0, 200)}...`);
 
     // Generate combined tile map reference (2000x800)
     let panoramaReferenceUrl: string | undefined;
     if (currentRoomParams.tileMap && nextRoomParams.tileMap) {
       try {
-        console.log(`[SceneGen] Creating panorama tile map reference (current + next)...`);
+        console.log(`[SceneGen] Creating panorama PURE PATH MASK reference (current + next)...`);
         panoramaReferenceUrl = await combineTileMapsAsPanorama(
           currentRoomParams.tileMap,
           nextRoomParams.tileMap
         );
-        console.log(`[SceneGen] Panorama reference image ready (combined tile maps)`);
+        console.log(`[SceneGen] Panorama reference ready (combined pure path masks)`);
       } catch (error) {
         console.warn(`[SceneGen] Failed to create panorama reference:`, error);
       }
     }
 
+    // Build composition-aware panorama prompt
+    const panoramaCompositionPrompt = `${panoramaStylePrompt}
+
+CRITICAL COMPOSITION RULE:
+The reference image is a 2000x800 panorama showing TWO CONNECTED PATHS in YELLOW on BLACK background.
+LEFT HALF (0-1000px): Current room path layout (IMMUTABLE)
+RIGHT HALF (1000-2000px): Next room path layout (IMMUTABLE)
+These path coordinates are SACRED. Preserve EXACT layout while applying the artistic styles above.
+Yellow = walkable paths. Black = obstacles/decoration. DO NOT reshape paths, ONLY stylize them.`;
+
     // Generate 2000x800 panorama with combined tile map reference
-    console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with combined tile map reference)' : ''}...`);
+    console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with PURE PATH MASK)' : ''}...`);
 
     const panoramaImage = await generatePixelArt({
-      prompt: panoramaPrompt,
+      prompt: panoramaCompositionPrompt,
       type: 'panorama',
       customDimensions: { width: 2000, height: 800 },
       referenceImage: panoramaReferenceUrl,
-      imageStrength: 0.85, // 85% adherence - critical for path alignment
-      useNanoBanana: true, // Use Gemini 2.5 Flash Image for panorama generation
+      imageStrength: 0.98, // 98% adherence - MAXIMUM (was 0.85)
+      useNanoBanana: true, // Gemini 2.5 Flash Image for panorama with layout preservation
     });
 
     console.log(`[SceneGen] Panorama generated, slicing into sections...`);
