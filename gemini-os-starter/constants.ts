@@ -28,7 +28,8 @@ export const getSystemPrompt = (
   playerLevel?: number,
   consequences?: Array<{type: string; description: string}>,
   storyContext?: string | null,
-  storyMode?: string
+  storyMode?: string,
+  eventContext?: string
 ): string => {
   let storyInstructions = '';
 
@@ -88,6 +89,17 @@ You are the AI Game Master for a roguelike RPG. Your ONLY job is to generate a v
 - Story Seed: ${storySeed || 0}
 ${consequences && consequences.length > 0 ? `- Recent Actions: ${consequences.map(c => `${c.type}: ${c.description}`).join(', ')}` : ''}
 ${storyInstructions}
+
+${eventContext ? `**EVENT HISTORY**
+This context influences how NPCs react and the narrative continuity:
+${eventContext}
+
+IMPORTANT: Use this event history to:
+- Make NPCs remember previous interactions
+- Reference past battles and choices in dialogue
+- Create consequences based on player's actions
+- Maintain narrative consistency across encounters
+` : ''}
 
 **RESPONSE FORMAT: JSON ONLY**
 Your entire response must be a single, valid JSON object. Do not use markdown. Do not add comments.

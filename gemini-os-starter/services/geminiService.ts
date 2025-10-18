@@ -7,6 +7,7 @@ import {GoogleGenAI} from '@google/genai';
 import {getSystemPrompt} from '../constants';
 import {InteractionData} from '../types';
 import {BiomeDefinition} from '../types/biomes';
+import {eventLogger} from './eventLogger';
 
 if (!process.env.API_KEY) {
   // This is a critical error. In a real app, you might throw or display a persistent error.
@@ -46,6 +47,8 @@ export async function* streamAppContent(
     return;
   }
 
+  const eventContext = eventLogger.getContextForAI();
+
   const systemPrompt = getSystemPrompt(
     currentMaxHistoryLength,
     characterClass,
@@ -54,7 +57,8 @@ export async function* streamAppContent(
     playerLevel,
     consequences,
     storyContext,
-    storyMode
+    storyMode,
+    eventContext
   ); // Generate system prompt dynamically with game context
 
   const currentInteraction = interactionHistory[0];

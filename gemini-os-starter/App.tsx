@@ -19,6 +19,7 @@ import { INITIAL_MAX_HISTORY_LENGTH } from './constants';
 import { generateCharacterClasses } from './services/classGenerator';
 import { streamAppContent, generateBiomeProgression } from './services/geminiService';
 import { generateRoom } from './services/roomGenerator';
+import { eventLogger } from './services/eventLogger';
 import {
   BattleAnimation,
   BattleState,
@@ -52,7 +53,10 @@ const calculateLevelUp = (currentLevel: number): number => {
 };
 
 const App: React.FC = () => {
-  // Track whether to show story input screen
+  useEffect(() => {
+    (window as any).eventLogger = eventLogger;
+  }, []);
+
   const [showStoryInput, setShowStoryInput] = useState<boolean>(true);
   const [isGeneratingClasses, setIsGeneratingClasses] = useState<boolean>(false);
   const [availableClasses, setAvailableClasses] = useState<CharacterClass[]>(CHARACTER_CLASSES);
@@ -129,7 +133,6 @@ const App: React.FC = () => {
 
   // Handle character selection
   const handleCharacterSelect = useCallback(async (character: CharacterClass) => {
-    // Generate initial room with dynamic biome
     const biomeKey = gameState.biomeProgression[0] || 'forest';
     const initialRoom = await generateRoom(
       'room_0',
@@ -141,8 +144,17 @@ const App: React.FC = () => {
     const rooms = new Map<string, Room>();
     rooms.set('room_0', initialRoom);
 
-    // Set player spawn position from tile map
     const spawnPosition = initialRoom.tileMap?.spawnPoint || {x: 400, y: 300};
+
+    eventLogger.initialize(character.name, gameState.storySeed);
+    eventLogger.logEvent(
+      'room_entered',
+      'room_0',
+      1,
+      character.startingHP,
+      `Started adventure in ${biomeKey} as ${character.name}`,
+      { biome: biomeKey }
+    );
 
     setGameState((prev) => ({
       ...prev,
@@ -188,6 +200,15 @@ const App: React.FC = () => {
 
       const newRooms = new Map(gameState.rooms);
       newRooms.set(newRoomId, newRoom);
+
+      eventLogger.logEvent(
+        'room_entered',
+        newRoomId,
+        gameState.level,
+        gameState.currentHP,
+        `Entered new room: ${newRoom.description}`,
+        { biome: biomeKey, direction }
+      );
 
       const tileMap = newRoom.tileMap;
       let newPosition = tileMap?.spawnPoint || { x: 400, y: 300 };
@@ -345,8 +366,16 @@ const App: React.FC = () => {
   // Handle object interaction
   const handleObjectInteract = useCallback(
     (object: GameObject) => {
-      if (object.type === 'enemy') {
-        // Start a battle
+    if (object.type === 'enemy') {
+        eventLogger.logEvent(
+          'battle_start',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Started battle with ${object.interactionText}`,
+          { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
+        );
+
         setGameState(prev => ({
           ...prev,
           battleState: {
@@ -360,10 +389,17 @@ const App: React.FC = () => {
           }
         }));
       } else {
-        // Handle other interactions (NPCs, items)
+        eventLogger.logEvent(
+          'npc_interaction',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Interacted with ${object.interactionText}`,
+          { npcId: object.id, npcName: object.interactionText }
+        );
+
         setCurrentInteractingObject(object);
 
-        // Mark object as interacted
         setGameState((prev) => {
           const room = prev.rooms.get(prev.currentRoomId);
           if (!room) return prev;
@@ -446,6 +482,16 @@ const App: React.FC = () => {
           type: consequenceType,
           timestamp: Date.now(),
         };
+        
+        eventLogger.logEvent(
+          'choice',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Made choice: ${choiceText}`,
+          { choiceId, choiceText, consequenceType }
+        );
+
         setGameState((prev) => ({
           ...prev,
           storyConsequences: [...prev.storyConsequences, consequence],
@@ -458,6 +504,16 @@ const App: React.FC = () => {
       if (choiceType === 'combat' || choiceType === 'damage') {
         const damage = value || 10;
         newHP = Math.max(0, gameState.currentHP - damage);
+        
+        eventLogger.logEvent(
+          'combat',
+          gameState.currentRoomId,
+          gameState.level,
+          newHP,
+          choiceText,
+          { choiceId, choiceType, damageTaken: damage }
+        );
+
         setGameState((prev) => ({
           ...prev,
           currentHP: newHP,
@@ -484,6 +540,15 @@ const App: React.FC = () => {
           },
         }));
       } else if (choiceType === 'loot') {
+        eventLogger.logEvent(
+          'loot',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          choiceText,
+          { choiceId, choiceType }
+        );
+
         setGameState((prev) => ({
           ...prev,
           currentAnimation: {
@@ -493,6 +558,15 @@ const App: React.FC = () => {
           },
         }));
       } else if (choiceType === 'dialogue') {
+        eventLogger.logEvent(
+          'dialogue',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          choiceText,
+          { choiceId, choiceType }
+        );
+
         setGameState((prev) => ({
           ...prev,
           currentAnimation: {
@@ -640,11 +714,36 @@ const App: React.FC = () => {
         const enemyLevel = gameState.battleState.enemy.enemyLevel || 1;
         const xpGained = calculateExperienceGain(enemyLevel, gameState.level);
 
+        eventLogger.logEvent(
+          'battle_end',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          `Defeated ${gameState.battleState.enemy.interactionText}`,
+          { 
+            enemyId: gameState.battleState.enemy.id,
+            enemyName: gameState.battleState.enemy.interactionText,
+            damageDealt: playerDamage,
+            xpGained 
+          }
+        );
+
         setTimeout(() => {
           handleAddExperience(xpGained);
 
-          // Check for item drop
           if (gameState.battleState?.enemy.itemDrop) {
+            eventLogger.logEvent(
+              'item_acquired',
+              gameState.currentRoomId,
+              gameState.level,
+              gameState.currentHP,
+              `Found ${gameState.battleState.enemy.itemDrop.name}`,
+              { 
+                itemId: gameState.battleState.enemy.itemDrop.id,
+                itemName: gameState.battleState.enemy.itemDrop.name 
+              }
+            );
+
             setGameState(prev => ({
               ...prev,
               inventory: [...prev.inventory, gameState.battleState!.enemy.itemDrop!],
@@ -757,6 +856,7 @@ const App: React.FC = () => {
   // Restart game
   const handleRestart = useCallback(() => {
     const newSeed = Math.floor(Math.random() * 10000);
+    eventLogger.reset();
     setGameState({
       selectedCharacter: null,
       currentHP: 0,
@@ -786,7 +886,7 @@ const App: React.FC = () => {
     setInteractionHistory([]);
     setShowAIDialog(false);
     setCurrentInteractingObject(null);
-    setAvailableClasses(CHARACTER_CLASSES); // Reset to default classes
+    setAvailableClasses(CHARACTER_CLASSES);
     setShowStoryInput(true);
   }, []);
 
