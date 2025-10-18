@@ -163,26 +163,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const mapHeight = tileMap.height * tileMap.tileSize;
 
         // Check map boundaries and trigger screen exit
+        // IMPORTANT: Only allow exit if player is on a walkable path
         if (!isExiting.current) {
-          if (newX > mapWidth - PLAYER_SIZE / 2) {
-            isExiting.current = true;
-            onScreenExit('right');
-            return;
-          }
-          if (newX < PLAYER_SIZE / 2) {
-            isExiting.current = true;
-            onScreenExit('left');
-            return;
-          }
-          if (newY > mapHeight - PLAYER_SIZE / 2) {
-            isExiting.current = true;
-            onScreenExit('down');
-            return;
-          }
-          if (newY < PLAYER_SIZE / 2) {
-            isExiting.current = true;
-            onScreenExit('up');
-            return;
+          // Check if current position is walkable before allowing exit
+          const isOnPath = isPositionWalkable(tileMap, playerPosition.x, playerPosition.y);
+
+          if (isOnPath) {
+            // Define exit buffer zone (how close to edge triggers exit)
+            const exitBuffer = 40;
+
+            if (newX > mapWidth - exitBuffer) {
+              isExiting.current = true;
+              onScreenExit('right');
+              return;
+            }
+            if (newX < exitBuffer) {
+              isExiting.current = true;
+              onScreenExit('left');
+              return;
+            }
+            if (newY > mapHeight - exitBuffer) {
+              isExiting.current = true;
+              onScreenExit('down');
+              return;
+            }
+            if (newY < exitBuffer) {
+              isExiting.current = true;
+              onScreenExit('up');
+              return;
+            }
           }
         }
 
