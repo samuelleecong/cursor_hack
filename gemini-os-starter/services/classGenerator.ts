@@ -195,6 +195,112 @@ For a sci-fi setting:
 Now generate 5 classes for the provided story context. Output ONLY the JSON array, nothing else.
 `;
 
+/**
+ * Validate a single character class for required fields and fix common issues
+ */
+function validateAndFixClass(cls: CharacterClass): { valid: boolean; missingFields: string[] } {
+  const missingFields: string[] = [];
+
+  // Check required fields
+  if (!cls.id) missingFields.push('id');
+  if (!cls.name) missingFields.push('name');
+  if (!cls.icon) missingFields.push('icon');
+  if (!cls.color) missingFields.push('color');
+  if (!cls.description) missingFields.push('description');
+  if (!cls.startingHP) missingFields.push('startingHP');
+  if (!cls.startingMana) missingFields.push('startingMana');
+  if (!cls.attackType) missingFields.push('attackType');
+  if (!cls.baseDamage) missingFields.push('baseDamage');
+  if (cls.defense === undefined || cls.defense === null) missingFields.push('defense');
+  if (cls.critChance === undefined || cls.critChance === null) missingFields.push('critChance');
+  if (!cls.specialAbility) missingFields.push('specialAbility');
+
+  if (cls.specialAbility) {
+    if (typeof cls.specialAbility !== 'object') {
+      missingFields.push('specialAbility (not object)');
+    } else {
+      if (!cls.specialAbility.name) missingFields.push('specialAbility.name');
+      if (!cls.specialAbility.description) missingFields.push('specialAbility.description');
+
+      // CRITICAL FIX: Check for undefined/null, not falsy (0 is valid!)
+      if (cls.specialAbility.manaCost === undefined || cls.specialAbility.manaCost === null) {
+        missingFields.push('specialAbility.manaCost');
+        // Auto-fix: Set default manaCost if missing
+        cls.specialAbility.manaCost = 30;
+        console.warn(`[ClassGenerator] Auto-fixed missing manaCost for ${cls.name}, set to 30`);
+      }
+
+      // Ensure at least one of baseDamage or healing exists
+      if (cls.specialAbility.baseDamage === undefined && cls.specialAbility.healing === undefined) {
+        console.warn(`[ClassGenerator] Class ${cls.name} special ability has no damage or healing, adding default healing`);
+        cls.specialAbility.healing = 30;
+      }
+    }
+  }
+
+  return { valid: missingFields.length === 0, missingFields };
+}
+
+/**
+ * Attempt to generate character classes with retries
+ */
+async function attemptClassGeneration(
+  prompt: string,
+  model: string,
+  attemptNumber: number,
+): Promise<CharacterClass[] | null> {
+  try {
+    console.log(`[ClassGenerator] Attempt ${attemptNumber}/3: Generating classes...`);
+
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: {},
+    });
+
+    let jsonText = response.text.trim();
+
+    if (attemptNumber === 1) {
+      console.log('[ClassGenerator] Raw response:', jsonText.substring(0, 500));
+    }
+
+    // Remove markdown code blocks if present
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
+    }
+
+    const generatedClasses: CharacterClass[] = JSON.parse(jsonText);
+    console.log('[ClassGenerator] Parsed classes count:', generatedClasses?.length);
+
+    // Validate the response
+    if (!Array.isArray(generatedClasses) || generatedClasses.length !== 5) {
+      console.error(`[ClassGenerator] Attempt ${attemptNumber}: Invalid array. Array:`, Array.isArray(generatedClasses), 'Length:', generatedClasses?.length, 'Expected: 5');
+      return null;
+    }
+
+    // Validate and auto-fix each class
+    const allValid = generatedClasses.every((cls) => {
+      const { valid, missingFields } = validateAndFixClass(cls);
+      if (!valid) {
+        console.error(`[ClassGenerator] Attempt ${attemptNumber}: Class ${cls.name || 'unknown'} missing fields:`, missingFields);
+        console.error('[ClassGenerator] Class data:', JSON.stringify(cls, null, 2));
+      }
+      return valid;
+    });
+
+    if (!allValid) {
+      console.warn(`[ClassGenerator] Attempt ${attemptNumber}: Some classes failed validation`);
+      return null;
+    }
+
+    console.log(`[ClassGenerator] Attempt ${attemptNumber}: Successfully generated and validated all classes`);
+    return generatedClasses;
+  } catch (error) {
+    console.error(`[ClassGenerator] Attempt ${attemptNumber} failed:`, error);
+    return null;
+  }
+}
+
 export async function generateCharacterClasses(
   storyContext: string | null,
   mode: StoryMode = 'inspiration',
@@ -209,70 +315,38 @@ export async function generateCharacterClasses(
     return getDefaultClasses();
   }
 
-  try {
-    const model = 'gemini-2.5-flash-lite';
+  const model = 'gemini-2.5-flash-lite';
 
-    // Use different prompts based on mode
-    let prompt: string;
-    if (mode === 'recreation') {
-      prompt = CHARACTER_EXTRACTION_PROMPT(storyContext);
-    } else {
-      // For 'inspiration' and 'continuation', generate new classes
-      prompt = CLASS_GENERATION_PROMPT(storyContext);
-    }
-
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
-      config: {},
-    });
-
-    let jsonText = response.text.trim();
-
-    // Remove markdown code blocks if present
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
-    }
-
-    const generatedClasses: CharacterClass[] = JSON.parse(jsonText);
-
-    // Validate the response
-    if (!Array.isArray(generatedClasses) || generatedClasses.length !== 5) {
-      console.error('Invalid class generation response, using defaults');
-      return getDefaultClasses();
-    }
-
-    // Validate each class has required fields
-    for (const cls of generatedClasses) {
-      if (
-        !cls.id ||
-        !cls.name ||
-        !cls.icon ||
-        !cls.color ||
-        !cls.description ||
-        !cls.startingHP ||
-        !cls.startingMana ||
-        !cls.attackType ||
-        !cls.baseDamage ||
-        cls.defense === undefined ||
-        cls.critChance === undefined ||
-        !cls.specialAbility ||
-        typeof cls.specialAbility !== 'object' ||
-        !cls.specialAbility.name ||
-        !cls.specialAbility.description ||
-        !cls.specialAbility.manaCost
-      ) {
-        console.error('Generated class missing required fields, using defaults');
-        return getDefaultClasses();
-      }
-    }
-
-    console.log('Successfully generated character classes:', generatedClasses);
-    return generatedClasses;
-  } catch (error) {
-    console.error('Error generating character classes:', error);
-    return getDefaultClasses();
+  // Use different prompts based on mode
+  let prompt: string;
+  if (mode === 'recreation') {
+    prompt = CHARACTER_EXTRACTION_PROMPT(storyContext);
+  } else {
+    // For 'inspiration' and 'continuation', generate new classes
+    prompt = CLASS_GENERATION_PROMPT(storyContext);
   }
+
+  // Try up to 3 times with exponential backoff
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const result = await attemptClassGeneration(prompt, model, attempt);
+
+    if (result) {
+      console.log('[ClassGenerator] Successfully generated character classes:', result.map(c => c.name).join(', '));
+      return result;
+    }
+
+    // If not the last attempt, wait before retrying (exponential backoff)
+    if (attempt < maxAttempts) {
+      const delay = Math.pow(2, attempt) * 500; // 1s, 2s
+      console.log(`[ClassGenerator] Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // All attempts failed, fall back to defaults
+  console.error('[ClassGenerator] All generation attempts failed, falling back to default classes');
+  return getDefaultClasses();
 }
 
 function getDefaultClasses(): CharacterClass[] {

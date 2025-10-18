@@ -31,7 +31,8 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
 
   if (!animation || !visible) return null;
 
-  if (animation.type === 'damage' || animation.type === 'loot') {
+  // Skip loot and dialogue animations, but show damage
+  if (animation.type === 'loot' || animation.type === 'dialogue') {
     return null;
   }
 
@@ -52,6 +53,36 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
               }}
             >
               +{animation.value} HP
+            </div>
+            {animation.text && (
+              <div
+                style={{
+                  fontSize: '20px',
+                  color: '#f4e8d0',
+                  marginTop: '16px',
+                  fontFamily: 'monospace'
+                }}
+              >
+                {animation.text}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'damage':
+        return (
+          <div className="animate-pulse">
+            <div className="text-9xl mb-4">⚔️</div>
+            <div
+              style={{
+                fontSize: '72px',
+                fontWeight: 'bold',
+                color: '#c9534f',
+                textShadow: '4px 4px 0px #8b3a34',
+                fontFamily: 'monospace'
+              }}
+            >
+              -{animation.value} HP
             </div>
             {animation.text && (
               <div

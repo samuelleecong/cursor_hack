@@ -52,14 +52,25 @@ function drawSprite(
   y: number,
   size: number = 50
 ) {
+  // Try to use sprite image first
   if (obj.spriteUrl) {
     const img = spriteImageCache.get(obj.spriteUrl);
     if (img) {
       ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
       return;
     } else {
+      // Start loading the image
       loadSpriteImage(obj.spriteUrl).catch(() => {});
+      // Fall through to emoji fallback while loading
     }
+  }
+
+  // Fallback: Draw emoji sprite if no image URL or image not loaded yet
+  if (obj.sprite) {
+    ctx.font = `${size}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(obj.sprite, x, y);
   }
 }
 
@@ -71,6 +82,7 @@ function drawCharacterSprite(
   size: number = 50,
   addGlow: boolean = true
 ) {
+  // Try to use sprite image first
   if (character.spriteUrl) {
     const img = spriteImageCache.get(character.spriteUrl);
     if (img) {
@@ -84,7 +96,24 @@ function drawCharacterSprite(
       }
       return;
     } else {
+      // Start loading the image
       loadSpriteImage(character.spriteUrl).catch(() => {});
+      // Fall through to emoji fallback while loading
+    }
+  }
+
+  // Fallback: Draw emoji icon if no image URL or image not loaded yet
+  if (character.icon) {
+    if (addGlow) {
+      ctx.shadowColor = character.color || '#3b82f6';
+      ctx.shadowBlur = 20;
+    }
+    ctx.font = `${size}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(character.icon, x, y);
+    if (addGlow) {
+      ctx.shadowBlur = 0;
     }
   }
 }

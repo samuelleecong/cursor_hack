@@ -1286,7 +1286,7 @@ const App: React.FC = () => {
         onComplete={handleAnimationComplete}
       />
       <AudioManager gameState={gameState} />
-      <Window title="Roguelike Adventure">
+      <Window title="">
         {/* Voice Controls - positioned at top right */}
         <div style={{
           position: 'absolute',

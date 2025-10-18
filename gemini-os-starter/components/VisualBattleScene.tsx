@@ -50,6 +50,14 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
   }>({});
   const [generatingImages, setGeneratingImages] = useState(false);
   const [showLoadingScreen, setShowLoadingScreen] = useState(false);
+  const [previousSceneData, setPreviousSceneData] = useState<BattleSceneData | null>(null);
+
+  // Store previous scene data when we have valid data
+  useEffect(() => {
+    if (sceneData) {
+      setPreviousSceneData(sceneData);
+    }
+  }, [sceneData]);
 
   // Generate or load cached images when scene data changes
   useEffect(() => {
@@ -175,9 +183,9 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
   }, [isLoading, sceneData]);
 
   // Determine loading stage
-  // Show loading screen whenever sceneData is not available
-  if (!sceneData) {
-    let stage: 'processing' | 'generating' | 'creating_art' = 'processing';
+  // Show loading ONLY if: (no sceneData AND delay passed) OR images are still generating
+  if (generatingImages || ((!sceneData) && showLoadingScreen)) {
+    let stage: 'processing' | 'generating' | 'creating_art' = 'generating';
 
     if (generatingImages) {
       stage = 'creating_art';
@@ -189,19 +197,78 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
     return <SceneGenerationLoading stage={stage} />;
   }
 
-  // Validate scene data before rendering
-  if (!sceneData.scene || !sceneData.choices) {
-    console.error('[VisualBattleScene] Invalid sceneData:', sceneData);
+  // If no sceneData but delay hasn't passed yet, show previous scene (frozen, no buttons)
+  if (!sceneData && !showLoadingScreen && previousSceneData) {
     return (
-      <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1a1a1a' }}>
-        <div className="text-center p-8">
-          <p className="text-red-500 text-xl mb-4">⚠️ Failed to load scene</p>
-          <p className="text-gray-400">Please try interacting again</p>
+      <div
+        className="w-full h-full flex flex-col overflow-hidden"
+        style={{
+          backgroundColor: '#1a1a1a',
+          fontFamily: 'monospace'
+        }}
+      >
+        {/* Battle Scene Display */}
+        <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+          {/* Background Image */}
+          {images.background && (
+            <img
+              src={images.background}
+              alt="Battle background"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{imageRendering: 'pixelated'}}
+            />
+          )}
+
+          {/* Dark overlay for readability */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 50%, rgba(0,0,0,0.6) 100%)'
+            }}
+          ></div>
+        </div>
+
+        {/* Story Text - Bottom Panel (no choices, just scene) */}
+        <div
+          className="p-8"
+          style={{
+            background: 'linear-gradient(to top, #1a1a1a 0%, rgba(26,26,26,0.95) 80%, transparent 100%)',
+            borderTop: '4px solid #5c3d2e'
+          }}
+        >
+          {/* Scene Description */}
+          <div className="max-w-4xl mx-auto">
+            <div
+              style={{
+                backgroundColor: 'rgba(61,40,23,0.95)',
+                border: '6px solid #3d2817',
+                borderRadius: '4px',
+                padding: '24px',
+                boxShadow: '0 8px 0 #3d2817, inset 0 4px 0 rgba(255,255,255,0.1)'
+              }}
+            >
+              <p
+                style={{
+                  color: '#f4e8d0',
+                  fontSize: '20px',
+                  lineHeight: '1.8',
+                  textAlign: 'center',
+                  fontWeight: '500'
+                }}
+              >
+                {previousSceneData.scene}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
+  // Final safety check
+  if (!sceneData) {
+    return null;
+  }
   return (
     <div
       className="w-full h-full flex flex-col overflow-hidden"
