@@ -130,18 +130,18 @@ export async function generatePixelArt(params: ImageGenerationParams): Promise<G
         console.log(`[falService] Nano Banana img2img with ${referencesToProcess.length} reference image(s)`);
         console.log(`[falService] Image strength set to ${imageStrength} for layout preservation`);
 
-        // Add mask interpretation instructions to prompt
+        // Add inpainting mask interpretation instructions to prompt (industry-standard convention)
         fullPrompt = `${fullPrompt}
 
 CRITICAL REFERENCE IMAGE INTERPRETATION:
-The reference image is a LAYOUT MASK where:
-- BRIGHT YELLOW areas (#FFD700) = WALKABLE PATHS that MUST be replaced with appropriate terrain (dirt paths, stone walkways, grass trails, wooden bridges, or other biome-appropriate walkable surfaces matching the scene's style and color palette)
-- BLACK areas = NON-WALKABLE TERRAIN that should become obstacles, vegetation, or environmental features appropriate to the biome
-- DO NOT keep the yellow color - replace it with natural, biome-appropriate path materials
-- The path layout (shape/position) must be preserved EXACTLY, but the yellow should become realistic terrain
-- Example: Forest = dirt path with moss edges; Desert = sandy trail; Dungeon = stone floor; Cave = smooth rock path`;
+The reference image is an INPAINTING MASK following industry standards where:
+- WHITE areas = WALKABLE PATHS to generate with appropriate terrain (dirt paths, stone walkways, grass trails, wooden bridges, or other biome-appropriate walkable surfaces matching the scene's style and color palette)
+- BLACK areas = NON-WALKABLE TERRAIN to fill with obstacles, vegetation, or environmental features appropriate to the biome
+- The path layout (shape/position) shown in white must be preserved EXACTLY while styling it with realistic terrain
+- Fill black areas completely with rich environmental details—no empty voids or black background showing
+- Examples: Forest = dirt path with moss edges surrounded by dense trees; Desert = sandy trail with cacti and rocks; Dungeon = stone floor with wall obstacles; Cave = smooth rock path with stalagmites`;
 
-        console.log(`[falService] Enhanced prompt with mask interpretation instructions`);
+        console.log(`[falService] Enhanced prompt with inpainting mask interpretation instructions`);
 
         // Upload all Blobs and collect URLs
         const imageUrls: string[] = [];
@@ -157,7 +157,7 @@ The reference image is a LAYOUT MASK where:
         }
 
         console.log(`[falService] Using ${imageUrls.length} reference images for layout anchor system`);
-        console.log(`[falService] Reference images are PURE PATH MASKS (yellow on black)`);
+        console.log(`[falService] Reference images are INPAINTING MASKS (WHITE paths on BLACK obstacles, feathered edges)`);
 
         result = await fal.subscribe('fal-ai/gemini-25-flash-image/edit', {
           input: {

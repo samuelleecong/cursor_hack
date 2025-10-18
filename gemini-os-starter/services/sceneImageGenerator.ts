@@ -197,27 +197,28 @@ export async function generateSingleRoomScene(
     }
 
     // Now use fal.ai to generate the actual image with EXPLICIT layout preservation
-    console.log(`[SceneGen] Generating image via fal.ai for room ${roomId}${referenceImage ? ' (with PURE PATH MASK reference)' : ''}...`);
+    console.log(`[SceneGen] Generating image via fal.ai for room ${roomId}${referenceImage ? ' (with INPAINTING MASK reference)' : ''}...`);
 
-    // Build composition-aware prompt with explicit instructions
+    // Build composition-aware prompt following Nano Banana best practices
+    // Use narrative style with photographic language for better semantic understanding
     const compositionPrompt = `${imagePrompt}
 
-CRITICAL COMPOSITION RULES - LAYOUT MASK INTERPRETATION:
-1. The reference image is a LAYOUT GUIDE ONLY (yellow/black are NOT the final colors - they get completely replaced)
-2. YELLOW ZONES in mask → REPLACE with styled walkable surfaces (dirt paths, stone trails, grass fields, wooden walkways, concrete, sand, sports field lines, etc. - match your art style)
-3. BLACK ZONES in mask → REPLACE with environmental obstacles and decoration (trees, rocks, water, walls, buildings, crowd stands, furniture, plants, barriers, etc. - fill completely)
-4. The EXACT SHAPE and POSITION of paths must be preserved, but styled realistically for the scene
-5. Paths MUST maintain continuity from left edge to right edge following the mask layout
-6. FILL THE ENTIRE 1000x800 CANVAS - no empty space, no visible mask colors, every pixel is rich environmental detail
-7. Final image should look completely natural and immersive with NO trace of the yellow/black reference mask`;
+CRITICAL COMPOSITION GUIDANCE (Reference Image Interpretation):
+The reference image is an inpainting mask where WHITE areas represent walkable paths that need stylized terrain, and BLACK areas represent obstacles/environment zones to fill with rich details.
+
+Think of this as a top-down architectural blueprint: the white corridors show where travelers walk (dirt trails, stone paths, grass fields, wooden planks, concrete walkways, or any biome-appropriate surface matching your artistic style). The black zones are where you'll paint the surrounding world—fill every black pixel with immersive environment details like ancient trees, moss-covered boulders, flowing water, architectural ruins, crowd stands, or whatever brings this biome to life.
+
+Compose this as a wide-angle aerial shot with 16-bit pixel art aesthetic. The path must flow seamlessly from the left edge to the right edge, maintaining its exact shape and position as shown in white. Use professional composition techniques: establish depth through layering (foreground obstacles, midground path, background atmosphere), ensure dramatic lighting that highlights the path while casting atmospheric shadows in obstacle zones, and create a color palette that unifies the entire 1000x800 canvas.
+
+Every single pixel matters—there should be no empty voids or raw background showing. The black areas aren't negative space; they're opportunities for environmental storytelling. Fill them generously with textures, objects, and atmospheric details that make this world feel alive and cohesive.`;
 
     const generatedImage = await generatePixelArt({
       prompt: compositionPrompt,
       type: 'scene',
       customDimensions: { width: 1000, height: 800 },
-      referenceImage: referenceImage, // Pure path mask Blob
-      imageStrength: 0.96, // 98% adherence - MAXIMUM without being image copy (was 0.85)
-      useNanoBanana: true, // Gemini 2.5 Flash Image understands composition better
+      referenceImage: referenceImage, // Inpainting mask Blob (WHITE=paths, BLACK=obstacles)
+      imageStrength: 0.75, // Optimized for Nano Banana (0.65 was too low, 0.98 risks abstract results)
+      useNanoBanana: true, // Gemini 2.5 Flash Image excels at semantic composition understanding
     });
 
     console.log(`[SceneGen] Scene image generated successfully for room ${roomId}`);
@@ -290,40 +291,39 @@ Seamlessly blended artistic styles with unified lighting and color harmony. Natu
     let panoramaReferenceUrl: string | undefined;
     if (currentRoomParams.tileMap && nextRoomParams.tileMap) {
       try {
-        console.log(`[SceneGen] Creating panorama PURE PATH MASK reference (current + next)...`);
+        console.log(`[SceneGen] Creating panorama INPAINTING MASK reference (current + next rooms)...`);
         panoramaReferenceUrl = await combineTileMapsAsPanorama(
           currentRoomParams.tileMap,
           nextRoomParams.tileMap
         );
-        console.log(`[SceneGen] Panorama reference ready (combined pure path masks)`);
+        console.log(`[SceneGen] Panorama inpainting mask ready (WHITE paths, BLACK obstacles, feathered edges)`);
       } catch (error) {
         console.warn(`[SceneGen] Failed to create panorama reference:`, error);
       }
     }
 
-    // Build composition-aware panorama prompt
+    // Build composition-aware panorama prompt following Nano Banana best practices
     const panoramaCompositionPrompt = `${panoramaStylePrompt}
 
-CRITICAL PANORAMA COMPOSITION - LAYOUT MASK INTERPRETATION:
-1. The reference is a 2000x800 LAYOUT GUIDE ONLY (yellow/black are NOT final colors - they indicate zones to replace)
-2. LEFT HALF (0-1000px): Current room layout | RIGHT HALF (1000-2000px): Next room layout
-3. YELLOW ZONES in mask → REPLACE with styled walkable surfaces matching your art style (dirt, stone, grass, concrete, field markings, wooden planks, sand, etc.)
-4. BLACK ZONES in mask → REPLACE with environmental obstacles and rich decoration (trees, rocks, water, walls, buildings, crowd stands, furniture, vehicles, terrain features, etc.)
-5. Path connectivity is SACRED - paths must flow continuously from left edge through center to right edge, preserving the EXACT mask geometry
-6. Blend artistic styles seamlessly at the 1000px midpoint for unified visual continuity
-7. FILL EVERY PIXEL of the 2000x800 canvas with scene content - no empty space, no visible mask colors
-8. Final panorama should look completely realistic and immersive with NO trace of the yellow/black reference mask`;
+CRITICAL PANORAMA COMPOSITION GUIDANCE (Reference Image Interpretation):
+This reference is a 2000x800 pixel inpainting mask displaying two connected rooms. WHITE areas mark walkable paths requiring stylized terrain; BLACK areas mark obstacle zones to fill with environmental richness.
+
+Visualize this as a cinematic wide-angle aerial photograph capturing two distinct but connected spaces: the LEFT HALF (0-1000px) represents the current room, while the RIGHT HALF (1000-2000px) shows the next room. Each white path corridor needs appropriate terrain styling (dirt trails, stone walkways, grass fields, wooden planks, concrete, field markings, or biome-specific surfaces). Every black pixel is canvas for environmental storytelling—populate these zones abundantly with obstacles, vegetation, architectural elements, crowd stands, water features, or atmospheric details that breathe life into each biome.
+
+The sacred compositional rule: paths must flow continuously from the left edge, through the center transition at 1000px, to the right edge. This creates visual momentum and spatial continuity. At the 1000px midpoint, seamlessly blend the artistic styles—imagine a professional photograph where lighting, color temperature, and atmospheric mood transition naturally between the two spaces without jarring discontinuity.
+
+Apply cinematic lighting techniques: use depth layering with foreground obstacles casting shadows, midground paths catching key light, and background atmosphere creating depth. Ensure the color palette harmonizes across the full 2000x800 canvas while allowing each room's unique character to emerge. Fill every pixel purposefully—no voids, no raw background. The black zones aren't empty space; they're opportunities for rich environmental texture that makes this panoramic world feel cohesive and alive.`;
 
     // Generate 2000x800 panorama with combined tile map reference
-    console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with PURE PATH MASK)' : ''}...`);
+    console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with INPAINTING MASK)' : ''}...`);
 
     const panoramaImage = await generatePixelArt({
       prompt: panoramaCompositionPrompt,
       type: 'panorama',
       customDimensions: { width: 2000, height: 800 },
       referenceImage: panoramaReferenceUrl,
-      imageStrength: 0.93, // 98% adherence - MAXIMUM (was 0.85)
-      useNanoBanana: true, // Gemini 2.5 Flash Image for panorama with layout preservation
+      imageStrength: 0.80, // Optimized for panorama composition (avoids abstract results at >0.90)
+      useNanoBanana: true, // Gemini 2.5 Flash Image excels at multi-image composition and blending
     });
 
     console.log(`[SceneGen] Panorama generated, slicing into sections...`);
