@@ -41,11 +41,29 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
         return (
           <div className="animate-bounce">
             <div className="text-8xl mb-4">✨</div>
-            <div className="text-6xl font-bold text-green-500 animate-pulse">
+            <div
+              className="animate-pulse"
+              style={{
+                fontSize: '72px',
+                fontWeight: 'bold',
+                color: '#6fa85c',
+                textShadow: '4px 4px 0px #4a7a3d',
+                fontFamily: 'monospace'
+              }}
+            >
               +{animation.value} HP
             </div>
             {animation.text && (
-              <div className="text-xl text-green-300 mt-4">{animation.text}</div>
+              <div
+                style={{
+                  fontSize: '20px',
+                  color: '#f4e8d0',
+                  marginTop: '16px',
+                  fontFamily: 'monospace'
+                }}
+              >
+                {animation.text}
+              </div>
             )}
           </div>
         );
@@ -54,7 +72,15 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
         return (
           <div className="animate-pulse">
             <div className="text-9xl mb-4">💥</div>
-            <div className="text-3xl font-bold text-yellow-400">
+            <div
+              style={{
+                fontSize: '36px',
+                fontWeight: 'bold',
+                color: '#d4a574',
+                textShadow: '3px 3px 0px #8b6f47',
+                fontFamily: 'monospace'
+              }}
+            >
               {animation.text || 'Combat!'}
             </div>
           </div>
@@ -64,8 +90,35 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
         return (
           <div className="animate-pulse">
             <div className="text-9xl mb-4">💬</div>
-            <div className="text-3xl font-bold text-blue-400">
+            <div
+              style={{
+                fontSize: '36px',
+                fontWeight: 'bold',
+                color: '#5a8fc9',
+                textShadow: '3px 3px 0px #3d5f82',
+                fontFamily: 'monospace'
+              }}
+            >
               {animation.text || 'Conversation'}
+            </div>
+          </div>
+        );
+
+      case 'levelup':
+        return (
+          <div className="animate-bounce">
+            <div className="text-9xl mb-4">⭐</div>
+            <div
+              style={{
+                fontSize: '48px',
+                fontWeight: 'bold',
+                color: '#d4a574',
+                textShadow: '4px 4px 0px #8b6f47',
+                fontFamily: 'monospace',
+                letterSpacing: '2px'
+              }}
+            >
+              {animation.text || 'Level Up!'}
             </div>
           </div>
         );
@@ -79,8 +132,18 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
     <div
       className={`fixed inset-0 flex items-center justify-center z-50 pointer-events-none transition-opacity duration-300 ${
         visible ? 'opacity-100' : 'opacity-0'
-      }`}>
-      <div className="bg-black/80 backdrop-blur-sm rounded-3xl p-12 text-center">
+      }`}
+    >
+      <div
+        className="text-center"
+        style={{
+          backgroundColor: 'rgba(61,40,23,0.95)',
+          border: '8px solid #3d2817',
+          borderRadius: '4px',
+          padding: '48px',
+          boxShadow: '0 12px 0 #3d2817, inset 0 6px 0 rgba(255,255,255,0.1)'
+        }}
+      >
         {getAnimationContent()}
       </div>
     </div>

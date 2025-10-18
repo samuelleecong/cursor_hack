@@ -622,13 +622,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [playerPosition, objects, keys, character, onMove, onInteract, onScreenExit, roomDescription, room, facing, isMoving, cameraOffset, isDebugMode, battleState]);
 
   return (
-    <div className="flex items-center justify-center bg-gray-950 w-full h-full">
+    <div
+      className="flex items-center justify-center w-full h-full"
+      style={{ backgroundColor: '#1a1a1a' }}
+    >
       <canvas
         ref={canvasRef}
         width={VIEWPORT_WIDTH}
         height={VIEWPORT_HEIGHT}
-        className="border-4 border-purple-600 rounded-lg shadow-2xl"
-        style={{imageRendering: 'pixelated'}}
+        style={{
+          imageRendering: 'pixelated',
+          border: '8px solid #5c3d2e',
+          borderRadius: '4px',
+          boxShadow: '0 12px 0 #3d2817, inset 0 4px 0 rgba(255,255,255,0.05)'
+        }}
       />
     </div>
   );

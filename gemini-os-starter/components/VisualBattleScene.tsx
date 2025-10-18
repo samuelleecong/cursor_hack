@@ -160,10 +160,19 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
 
   if (isLoading || !sceneData) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-900">
+      <div
+        className="w-full h-full flex items-center justify-center"
+        style={{
+          backgroundColor: '#2d5a4e',
+          backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
+          fontFamily: 'monospace'
+        }}
+      >
         <div className="text-center">
-          <div className="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-purple-500 mb-6 mx-auto"></div>
-          <p className="text-purple-300 text-2xl font-bold">Generating scene...</p>
+          <div className="text-6xl mb-4 animate-pulse">⚙️</div>
+          <p style={{ color: '#f4e8d0', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px' }}>
+            Generating scene...
+          </p>
         </div>
       </div>
     );
@@ -171,23 +180,37 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
 
   if (generatingImages) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-900">
+      <div
+        className="w-full h-full flex items-center justify-center"
+        style={{
+          backgroundColor: '#2d5a4e',
+          backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
+          fontFamily: 'monospace'
+        }}
+      >
         <div className="text-center max-w-2xl px-8">
           <div className="animate-pulse mb-6">
             <div className="text-6xl mb-4">🎨</div>
-            <div className="h-2 bg-purple-600 rounded-full overflow-hidden">
-              <div className="h-full bg-purple-400 animate-shimmer"></div>
-            </div>
           </div>
-          <p className="text-purple-300 text-2xl font-bold mb-2">Creating pixel art...</p>
-          <p className="text-gray-400 text-sm">This may take 5-10 seconds</p>
+          <p style={{ color: '#f4e8d0', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px', marginBottom: '8px' }}>
+            Creating pixel art...
+          </p>
+          <p style={{ color: '#c9b896', fontSize: '14px' }}>
+            This may take 5-10 seconds
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-900 overflow-hidden">
+    <div
+      className="w-full h-full flex flex-col overflow-hidden"
+      style={{
+        backgroundColor: '#1a1a1a',
+        fontFamily: 'monospace'
+      }}
+    >
       {/* Battle Scene Display */}
       <div className="flex-1 relative flex items-center justify-center overflow-hidden">
         {/* Background Image */}
@@ -201,15 +224,42 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
         )}
 
         {/* Dark overlay for readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60"></div>
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 50%, rgba(0,0,0,0.6) 100%)'
+          }}
+        ></div>
       </div>
 
       {/* Story Text & Choices - Bottom Panel */}
-      <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent p-8 border-t-4 border-purple-600">
+      <div
+        className="p-8"
+        style={{
+          background: 'linear-gradient(to top, #1a1a1a 0%, rgba(26,26,26,0.95) 80%, transparent 100%)',
+          borderTop: '4px solid #5c3d2e'
+        }}
+      >
         {/* Scene Description */}
         <div className="max-w-4xl mx-auto mb-6">
-          <div className="bg-black/70 backdrop-blur-md rounded-xl p-6 border-2 border-purple-500/50">
-            <p className="text-gray-100 text-xl leading-relaxed text-center font-medium">
+          <div
+            style={{
+              backgroundColor: 'rgba(61,40,23,0.95)',
+              border: '6px solid #3d2817',
+              borderRadius: '4px',
+              padding: '24px',
+              boxShadow: '0 8px 0 #3d2817, inset 0 4px 0 rgba(255,255,255,0.1)'
+            }}
+          >
+            <p
+              style={{
+                color: '#f4e8d0',
+                fontSize: '20px',
+                lineHeight: '1.8',
+                textAlign: 'center',
+                fontWeight: '500'
+              }}
+            >
               {sceneData.scene}
             </p>
           </div>
@@ -222,22 +272,78 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
               const getButtonStyle = () => {
                 switch (choice.type) {
                   case 'conclude':
-                    return 'bg-purple-600 hover:bg-purple-700 border-purple-400 shadow-purple-500/50';
+                    return {
+                      backgroundColor: '#7b1fa2',
+                      borderColor: '#4a0e4e',
+                      shadowColor: '#4a0e4e'
+                    };
+                  case 'combat':
+                  case 'damage':
+                    return {
+                      backgroundColor: '#c9534f',
+                      borderColor: '#8b3a34',
+                      shadowColor: '#8b3a34'
+                    };
+                  case 'dialogue':
+                    return {
+                      backgroundColor: '#5a8fc9',
+                      borderColor: '#3d5f82',
+                      shadowColor: '#3d5f82'
+                    };
+                  case 'heal':
+                    return {
+                      backgroundColor: '#6fa85c',
+                      borderColor: '#4a7a3d',
+                      shadowColor: '#4a7a3d'
+                    };
                   default:
-                    return 'bg-gray-600 hover:bg-gray-700 border-gray-400 shadow-gray-500/50';
+                    return {
+                      backgroundColor: '#8b6f47',
+                      borderColor: '#5c3d2e',
+                      shadowColor: '#5c3d2e'
+                    };
                 }
               };
+
+              const buttonStyle = getButtonStyle();
 
               return (
                 <button
                   key={choice.id}
                   onClick={() => onChoice(choice.id, choice.type, choice.value)}
-                  className={`${getButtonStyle()} text-white font-bold px-6 py-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 hover:-translate-y-1 shadow-lg active:scale-95 min-w-[160px]`}
+                  className="transition-all active:translate-y-2"
+                  style={{
+                    backgroundColor: buttonStyle.backgroundColor,
+                    border: `5px solid ${buttonStyle.borderColor}`,
+                    borderRadius: '4px',
+                    boxShadow: `0 8px 0 ${buttonStyle.shadowColor}`,
+                    color: '#f4e8d0',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    letterSpacing: '1px',
+                    padding: '16px 24px',
+                    cursor: 'pointer',
+                    minWidth: '180px'
+                  }}
                   disabled={generatingImages}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = `0 12px 0 ${buttonStyle.shadowColor}`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = `0 8px 0 ${buttonStyle.shadowColor}`;
+                  }}
                 >
-                  <span className="block text-center">{choice.text}</span>
+                  <span style={{ display: 'block', textAlign: 'center' }}>{choice.text}</span>
                   { (choice.type === 'damage' || choice.type === 'combat' || choice.type === 'heal') && choice.value !== undefined && (
-                    <span className="block text-sm mt-1 opacity-90">
+                    <span style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      marginTop: '4px',
+                      opacity: 0.9,
+                      color: '#e8d4b0'
+                    }}>
                       {choice.type === 'damage' || choice.type === 'combat'
                         ? `${choice.value} damage`
                         : `+${choice.value} HP`}
