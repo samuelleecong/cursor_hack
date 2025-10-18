@@ -31,21 +31,12 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
 
   if (!animation || !visible) return null;
 
+  if (animation.type === 'damage' || animation.type === 'loot') {
+    return null;
+  }
+
   const getAnimationContent = () => {
     switch (animation.type) {
-      case 'damage':
-        return (
-          <div className="animate-bounce">
-            <div className="text-8xl mb-4">⚔️</div>
-            <div className="text-6xl font-bold text-red-500 animate-pulse">
-              -{animation.value} HP
-            </div>
-            {animation.text && (
-              <div className="text-xl text-red-300 mt-4">{animation.text}</div>
-            )}
-          </div>
-        );
-
       case 'heal':
         return (
           <div className="animate-bounce">
@@ -65,16 +56,6 @@ export const AnimationOverlay: React.FC<AnimationOverlayProps> = ({
             <div className="text-9xl mb-4">💥</div>
             <div className="text-3xl font-bold text-yellow-400">
               {animation.text || 'Combat!'}
-            </div>
-          </div>
-        );
-
-      case 'loot':
-        return (
-          <div className="animate-bounce">
-            <div className="text-9xl mb-4">💎</div>
-            <div className="text-3xl font-bold text-purple-400">
-              {animation.text || 'Item Found!'}
             </div>
           </div>
         );

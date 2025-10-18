@@ -7,7 +7,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CHARACTER_CLASSES, CharacterClass } from './characterClasses';
 import { AnimationOverlay } from './components/AnimationOverlay';
 import { AudioManager } from './components/AudioManager';
-import { BattleUI } from './components/BattleUI';
 import { CharacterSelection } from './components/CharacterSelection';
 import { ClassGenerationLoading } from './components/ClassGenerationLoading';
 import { GameCanvas } from './components/GameCanvas';
@@ -422,89 +421,72 @@ const App: React.FC = () => {
   // Handle object interaction
   const handleObjectInteract = useCallback(
     (object: GameObject) => {
-    if (object.type === 'enemy') {
-        eventLogger.logEvent(
-          'battle_start',
-          gameState.currentRoomId,
-          gameState.level,
-          gameState.currentHP,
-          `Started battle with ${object.interactionText}`,
-          { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
-        );
+      const eventType = object.type === 'enemy' ? 'battle_start' : 'npc_interaction';
+      const eventMessage = object.type === 'enemy' 
+        ? `Started battle with ${object.interactionText}`
+        : `Interacted with ${object.interactionText}`;
+      const eventData = object.type === 'enemy'
+        ? { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
+        : { npcId: object.id, npcName: object.interactionText };
 
-        setGameState(prev => ({
-          ...prev,
-          battleState: {
-            enemy: object,
-            enemyHP: 100,
-            maxEnemyHP: 100,
-            status: 'ongoing',
-            turn: 'player',
-            history: [],
-            animationQueue: [],
+      eventLogger.logEvent(
+        eventType,
+        gameState.currentRoomId,
+        gameState.level,
+        gameState.currentHP,
+        eventMessage,
+        eventData
+      );
+
+      setCurrentInteractingObject(object);
+
+      setGameState((prev) => {
+        const room = prev.rooms.get(prev.currentRoomId);
+        if (!room) return prev;
+
+        const updatedObjects = room.objects.map((obj) => {
+          if (obj.id === object.id) {
+            const interactionCount = (obj.interactionHistory?.count || 0) + 1;
+            return {
+              ...obj,
+              hasInteracted: true,
+              interactionHistory: {
+                count: interactionCount,
+                lastInteraction: Date.now(),
+                previousChoices: obj.interactionHistory?.previousChoices || [],
+                conversationSummary: obj.interactionHistory?.conversationSummary
+              }
+            };
           }
-        }));
-      } else {
-        eventLogger.logEvent(
-          'npc_interaction',
-          gameState.currentRoomId,
-          gameState.level,
-          gameState.currentHP,
-          `Interacted with ${object.interactionText}`,
-          { npcId: object.id, npcName: object.interactionText }
-        );
-
-        setCurrentInteractingObject(object);
-
-        setGameState((prev) => {
-          const room = prev.rooms.get(prev.currentRoomId);
-          if (!room) return prev;
-
-          const updatedObjects = room.objects.map((obj) => {
-            if (obj.id === object.id) {
-              const interactionCount = (obj.interactionHistory?.count || 0) + 1;
-              return {
-                ...obj,
-                hasInteracted: true,
-                interactionHistory: {
-                  count: interactionCount,
-                  lastInteraction: Date.now(),
-                  previousChoices: obj.interactionHistory?.previousChoices || [],
-                  conversationSummary: obj.interactionHistory?.conversationSummary
-                }
-              };
-            }
-            return obj;
-          });
-
-          const updatedRoom = {...room, objects: updatedObjects};
-          const newRooms = new Map(prev.rooms);
-          newRooms.set(prev.currentRoomId, updatedRoom);
-
-          return {...prev, rooms: newRooms};
+          return obj;
         });
 
-        // Create interaction data for AI
-        const interactionData: InteractionData = {
-          id: object.id,
-          type: object.type,
-          elementText: `${object.interactionText} (${object.sprite})`,
-          elementType: 'game_object',
-          appContext: 'roguelike_game',
-        };
+        const updatedRoom = {...room, objects: updatedObjects};
+        const newRooms = new Map(prev.rooms);
+        newRooms.set(prev.currentRoomId, updatedRoom);
 
-        const newHistory = [
-          interactionData,
-          ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
-        ];
-        setInteractionHistory(newHistory);
-        setError(null);
-        setShowAIDialog(true);
-        setIsLoading(true);
-        setSceneData(null);
+        return {...prev, rooms: newRooms};
+      });
 
-        internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
-      }
+      const interactionData: InteractionData = {
+        id: object.id,
+        type: object.type,
+        elementText: `${object.interactionText} (${object.sprite})`,
+        elementType: 'game_object',
+        appContext: 'roguelike_game',
+      };
+
+      const newHistory = [
+        interactionData,
+        ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
+      ];
+      setInteractionHistory(newHistory);
+      setError(null);
+      setShowAIDialog(true);
+      setIsLoading(true);
+      setSceneData(null);
+
+      internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
     },
     [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, gameState.currentRoomId, gameState.level, gameState.currentHP],
   );
@@ -1128,13 +1110,6 @@ const App: React.FC = () => {
                     battleState={gameState.battleState}
                   />
                 ) : null}
-
-                <BattleUI
-                  battleState={gameState.battleState}
-                  onPlayerAction={handleBattleAction}
-                  character={gameState.selectedCharacter}
-                  currentMana={gameState.currentMana}
-                />
 
                 {/* Visual Battle Scene Overlay */}
                 {showAIDialog && (
