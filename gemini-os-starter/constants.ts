@@ -27,8 +27,56 @@ export const getSystemPrompt = (
   storySeed?: number,
   playerLevel?: number,
   consequences?: Array<{type: string; description: string}>,
-  storyContext?: string | null
-): string => `
+  storyContext?: string | null,
+  storyMode?: string
+): string => {
+  let storyInstructions = '';
+
+  if (storyContext) {
+    if (storyMode === 'recreation') {
+      storyInstructions = `
+**STORY RECREATION MODE**
+You are recreating the actual story:
+${storyContext}
+
+**IMPORTANT INSTRUCTIONS:**
+- Follow the plot and events from the original story
+- Include actual characters from the story in encounters
+- Recreate key scenes and moments from the narrative
+- Allow the player to experience the story's major plot points
+- Reference specific events and dialogue from the source material
+- If the player is playing AS a character from the story, stay true to that character's personality and role
+- Progress through the story chronologically when possible`;
+    } else if (storyMode === 'continuation') {
+      storyInstructions = `
+**STORY CONTINUATION MODE**
+This adventure takes place AFTER the events of:
+${storyContext}
+
+**IMPORTANT INSTRUCTIONS:**
+- The original story has already happened
+- Reference past events and characters from the source material
+- Show how the world has changed since the story ended
+- Characters may reference what happened in the original tale
+- Create new adventures that build on the established lore
+- Maintain consistency with the canon and established world-building`;
+    } else {
+      // inspiration mode (default)
+      storyInstructions = `
+**THEMATIC INSPIRATION MODE**
+The game world and narrative should be inspired by this story:
+${storyContext}
+
+**IMPORTANT INSTRUCTIONS:**
+- Use this story as inspiration for the setting, atmosphere, and tone
+- Create encounters that FEEL like they belong in this universe
+- Use similar character archetypes and themes
+- Maintain thematic consistency with the provided narrative
+- Create original adventures that capture the essence of the source material`;
+    }
+  }
+
+  return `
 **ROLE: AI GAME MASTER**
 
 You are the AI Game Master for a roguelike RPG. Your ONLY job is to generate a valid JSON object based on the player's actions. Do not output any text other than the JSON object.
@@ -39,7 +87,7 @@ You are the AI Game Master for a roguelike RPG. Your ONLY job is to generate a v
 - Level: ${playerLevel || 1}
 - Story Seed: ${storySeed || 0}
 ${consequences && consequences.length > 0 ? `- Recent Actions: ${consequences.map(c => `${c.type}: ${c.description}`).join(', ')}` : ''}
-${storyContext ? `\n**STORY CONTEXT**\nThe game world and narrative should be inspired by this story:\n${storyContext}\n\nUse this story as inspiration for the setting, atmosphere, characters, and encounters. Maintain thematic consistency with the provided narrative.` : ''}
+${storyInstructions}
 
 **RESPONSE FORMAT: JSON ONLY**
 Your entire response must be a single, valid JSON object. Do not use markdown. Do not add comments.
@@ -79,3 +127,4 @@ Your entire response must be a single, valid JSON object. Do not use markdown. D
 - The 'imagePrompts' object and its 'background' field are NOT optional. You MUST provide them in every response.
 - Failure to adhere to this structure will break the game. No exceptions.
 `;
+};

@@ -4,27 +4,29 @@
  */
 /* tslint:disable */
 import React, { useState } from 'react';
+import { StoryMode } from '../types';
 
 interface StoryInputProps {
-  onSubmit: (story: string | null) => void;
+  onSubmit: (story: string | null, mode: StoryMode) => void;
 }
 
 export const StoryInput: React.FC<StoryInputProps> = ({ onSubmit }) => {
   const [storyText, setStoryText] = useState('');
+  const [selectedMode, setSelectedMode] = useState<StoryMode>('inspiration');
 
   const handleSubmit = () => {
     if (storyText.trim()) {
-      onSubmit(storyText.trim());
+      onSubmit(storyText.trim(), selectedMode);
     }
   };
 
   const handleSkip = () => {
-    onSubmit(null);
+    onSubmit(null, 'inspiration');
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
-      <div className="max-w-2xl w-full bg-gray-900/90 backdrop-blur rounded-lg shadow-2xl p-8 border-2 border-purple-500">
+    <div className="flex flex-col items-center min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
+      <div className="max-w-2xl w-full bg-gray-900/90 backdrop-blur rounded-lg shadow-2xl p-8 border-2 border-purple-500 my-8">
         <h1 className="text-4xl font-bold text-center mb-4 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
           Story-Based Game Mode
         </h1>
@@ -53,6 +55,84 @@ Or leave blank to use random generation."
             {storyText.length} / 5000 characters
           </div>
         </div>
+
+        {storyText.trim() && (
+          <div className="mb-6">
+            <label className="block text-purple-300 font-semibold mb-3">
+              Story Mode
+            </label>
+            <div className="space-y-3">
+              <button
+                onClick={() => setSelectedMode('recreation')}
+                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                  selectedMode === 'recreation'
+                    ? 'bg-purple-600/40 border-purple-400'
+                    : 'bg-gray-800/60 border-gray-600 hover:border-purple-500'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">🎭</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-white mb-1">Story Recreation</div>
+                    <div className="text-sm text-gray-300">
+                      Play through the actual story. Meet real characters, recreate key scenes.
+                      Choose to play AS a character from the story or create your own.
+                    </div>
+                  </div>
+                  {selectedMode === 'recreation' && (
+                    <div className="text-purple-400">✓</div>
+                  )}
+                </div>
+              </button>
+
+              <button
+                onClick={() => setSelectedMode('continuation')}
+                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                  selectedMode === 'continuation'
+                    ? 'bg-purple-600/40 border-purple-400'
+                    : 'bg-gray-800/60 border-gray-600 hover:border-purple-500'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">📖</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-white mb-1">Story Continuation</div>
+                    <div className="text-sm text-gray-300">
+                      Takes place AFTER the original story. References events and characters from canon.
+                      New adventures in an established world.
+                    </div>
+                  </div>
+                  {selectedMode === 'continuation' && (
+                    <div className="text-purple-400">✓</div>
+                  )}
+                </div>
+              </button>
+
+              <button
+                onClick={() => setSelectedMode('inspiration')}
+                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                  selectedMode === 'inspiration'
+                    ? 'bg-purple-600/40 border-purple-400'
+                    : 'bg-gray-800/60 border-gray-600 hover:border-purple-500'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">✨</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-white mb-1">Thematic Inspiration</div>
+                    <div className="text-sm text-gray-300">
+                      Uses the story's world, tone, and atmosphere. Creates original adventures
+                      that FEEL like the source material but aren't tied to the plot.
+                    </div>
+                  </div>
+                  {selectedMode === 'inspiration' && (
+                    <div className="text-purple-400">✓</div>
+                  )}
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-4">
           <button

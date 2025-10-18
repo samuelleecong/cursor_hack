@@ -3,31 +3,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /* tslint:disable */
-import React, {useCallback, useEffect, useState} from 'react';
-import {AnimationOverlay} from './components/AnimationOverlay';
-import {CharacterSelection} from './components/CharacterSelection';
-import {StoryInput} from './components/StoryInput';
-import {ClassGenerationLoading} from './components/ClassGenerationLoading';
-import {VisualBattleScene, BattleSceneData} from './components/VisualBattleScene';
-import {BattleUI} from './components/BattleUI';
-import {GameCanvas} from './components/GameCanvas';
-import {GameHUD} from './components/GameHUD';
-import {Window} from './components/Window';
-import {CHARACTER_CLASSES, CharacterClass} from './characterClasses';
-import {INITIAL_MAX_HISTORY_LENGTH} from './constants';
-import {streamAppContent} from './services/geminiService';
-import {generateRoom} from './services/roomGenerator';
-import {generateCharacterClasses} from './services/classGenerator';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CHARACTER_CLASSES, CharacterClass } from './characterClasses';
+import { AnimationOverlay } from './components/AnimationOverlay';
+import { BattleUI } from './components/BattleUI';
+import { CharacterSelection } from './components/CharacterSelection';
+import { ClassGenerationLoading } from './components/ClassGenerationLoading';
+import { GameCanvas } from './components/GameCanvas';
+import { GameHUD } from './components/GameHUD';
+import { StoryInput } from './components/StoryInput';
+import { BattleSceneData, VisualBattleScene } from './components/VisualBattleScene';
+import { Window } from './components/Window';
+import { INITIAL_MAX_HISTORY_LENGTH } from './constants';
+import { generateCharacterClasses } from './services/classGenerator';
+import { streamAppContent } from './services/geminiService';
+import { generateRoom } from './services/roomGenerator';
 import {
+  BattleAnimation,
+  BattleState,
+  GameObject,
   GameState,
   InteractionData,
   Position,
-  GameObject,
-  Room,
-  GameAnimation,
-  BattleState,
-  Item,
-  BattleAnimation
+  Room
 } from './types';
 
 // Utility Functions
@@ -71,6 +69,7 @@ const App: React.FC = () => {
     isAlive: true,
     storySeed: Math.floor(Math.random() * 10000),
     storyContext: null,
+    storyMode: 'inspiration',
     isInGame: false,
     playerPosition: {x: 400, y: 300},
     currentRoomId: 'room_0',
@@ -91,17 +90,18 @@ const App: React.FC = () => {
   const [currentInteractingObject, setCurrentInteractingObject] = useState<GameObject | null>(null);
 
   // Handle story input submission
-  const handleStorySubmit = useCallback(async (story: string | null) => {
+  const handleStorySubmit = useCallback(async (story: string | null, mode: 'inspiration' | 'recreation' | 'continuation') => {
     setGameState((prev) => ({
       ...prev,
       storyContext: story,
+      storyMode: mode,
     }));
     setShowStoryInput(false);
 
-    // Generate character classes based on story
+    // Generate character classes based on story and mode
     setIsGeneratingClasses(true);
     try {
-      const generatedClasses = await generateCharacterClasses(story);
+      const generatedClasses = await generateCharacterClasses(story, mode);
       setAvailableClasses(generatedClasses);
     } catch (error) {
       console.error('Failed to generate classes:', error);
@@ -245,6 +245,7 @@ const App: React.FC = () => {
           gameState.level,
           gameState.storyConsequences,
           gameState.storyContext,
+          gameState.storyMode,
         );
         for await (const chunk of stream) {
           accumulatedContent += chunk;
@@ -278,7 +279,7 @@ const App: React.FC = () => {
         setIsLoading(false);
       }
     },
-    [gameState.selectedCharacter, gameState.currentHP, gameState.storySeed, gameState.level, gameState.storyConsequences, gameState.storyContext],
+    [gameState.selectedCharacter, gameState.currentHP, gameState.storySeed, gameState.level, gameState.storyConsequences, gameState.storyContext, gameState.storyMode],
   );
 
   // Handle object interaction
@@ -665,10 +666,10 @@ const App: React.FC = () => {
 
     if (currentRoom && gameState.battleState.status === 'player_won') {
       // Remove defeated enemy from the room
-      const newObjects = currentRoom.objects.filter(
+      const newObjects: GameObject[] = (currentRoom as Room).objects.filter(
         (obj) => obj.id !== gameState.battleState?.enemy.id
       );
-      const updatedRoom = { ...currentRoom, objects: newObjects };
+      const updatedRoom: Room = { ...(currentRoom as Room), objects: newObjects };
       updatedRooms.set(gameState.currentRoomId, updatedRoom);
     }
 
@@ -706,6 +707,7 @@ const App: React.FC = () => {
       isAlive: true,
       storySeed: newSeed,
       storyContext: null,
+      storyMode: 'inspiration',
       isInGame: false,
       playerPosition: {x: 400, y: 300},
       currentRoomId: 'room_0',

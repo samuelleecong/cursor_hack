@@ -99,6 +99,8 @@ export interface StoryConsequence {
   timestamp: number;
 }
 
+export type StoryMode = 'inspiration' | 'recreation' | 'continuation';
+
 export interface GameState {
   selectedCharacter: CharacterClass | null;
   currentHP: number;
@@ -111,6 +113,7 @@ export interface GameState {
   isAlive: boolean;
   storySeed: number;
   storyContext: string | null; // User-provided story for narrative generation
+  storyMode: StoryMode; // How the AI should use the story
   isInGame: boolean;
   playerPosition: Position;
   currentRoomId: string;

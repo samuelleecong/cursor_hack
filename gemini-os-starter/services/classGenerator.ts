@@ -5,8 +5,69 @@
 /* tslint:disable */
 import {GoogleGenAI} from '@google/genai';
 import {CharacterClass} from '../characterClasses';
+import {StoryMode} from '../types';
 
 const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
+
+const CHARACTER_EXTRACTION_PROMPT = (storyContext: string) => `
+You are a game design AI. Based on the story provided, extract 5 main characters from the story that the player could play AS.
+
+**STORY:**
+${storyContext}
+
+**YOUR TASK:**
+Extract 5 actual characters from this story. These should be characters that appear in the story with defined roles and personalities.
+
+**RESPONSE FORMAT: JSON ONLY**
+Your entire response must be a single, valid JSON array. Do not use markdown. Do not add comments or explanations.
+
+**JSON STRUCTURE:**
+[
+  {
+    "id": "(string) lowercase_underscore_id based on character name",
+    "name": "(string) The character's actual name from the story",
+    "icon": "(string) A single emoji that represents this character",
+    "color": "(string) A hex color code like '#ffcdd2'",
+    "description": "(string) A 1-2 sentence description of who this character is in the story",
+    "startingHP": (number) Starting health points (60-100, based on character archetype),
+    "attackType": "(string) What kind of combat/skills they use",
+    "specialAbility": "(string) A unique ability based on something they do in the story"
+  }
+]
+
+**REQUIREMENTS:**
+1. Extract EXACTLY 5 characters from the story
+2. Use their actual names and roles from the story
+3. HP should be based on their archetype (warriors/strong = 90-100, mages/fragile = 60-70, balanced = 75-85)
+4. Attack types and abilities should reflect what they actually do in the story
+5. If there aren't 5 clear main characters, include important supporting characters
+
+**EXAMPLE for Romeo & Juliet:**
+[
+  {
+    "id": "romeo",
+    "name": "Romeo Montague",
+    "icon": "💘",
+    "color": "#e91e63",
+    "description": "The passionate young heir of House Montague, skilled in swordplay and driven by love.",
+    "startingHP": 80,
+    "attackType": "Sword Fighting",
+    "specialAbility": "Passionate Strike"
+  },
+  {
+    "id": "juliet",
+    "name": "Juliet Capulet",
+    "icon": "🌹",
+    "color": "#f48fb1",
+    "description": "The intelligent daughter of House Capulet, clever and resourceful.",
+    "startingHP": 75,
+    "attackType": "Cunning & Deception",
+    "specialAbility": "Feigned Death"
+  }
+]
+
+Now extract 5 characters from the provided story. Output ONLY the JSON array, nothing else.
+`;
 
 const CLASS_GENERATION_PROMPT = (storyContext: string) => `
 You are a game design AI. Based on the story context provided, generate 5 unique character classes that fit the setting and theme.
@@ -88,6 +149,7 @@ Now generate 5 classes for the provided story context. Output ONLY the JSON arra
 
 export async function generateCharacterClasses(
   storyContext: string | null,
+  mode: StoryMode = 'inspiration',
 ): Promise<CharacterClass[]> {
   // If no story context, return default classes
   if (!storyContext) {
@@ -101,7 +163,15 @@ export async function generateCharacterClasses(
 
   try {
     const model = 'gemini-2.5-flash-lite';
-    const prompt = CLASS_GENERATION_PROMPT(storyContext);
+
+    // Use different prompts based on mode
+    let prompt: string;
+    if (mode === 'recreation') {
+      prompt = CHARACTER_EXTRACTION_PROMPT(storyContext);
+    } else {
+      // For 'inspiration' and 'continuation', generate new classes
+      prompt = CLASS_GENERATION_PROMPT(storyContext);
+    }
 
     const response = await ai.models.generateContent({
       model: model,
