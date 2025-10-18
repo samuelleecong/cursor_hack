@@ -7,6 +7,7 @@ import {Room, GameObject, Item} from '../types';
 import {generateTileMap} from './mapGenerator';
 import {getOrGenerateBiome} from './biomeService';
 import {generateEnemySprite, generateNPCSprite, generateItemSprite} from './spriteGenerator';
+import {generateNPCInteractionText} from './npcGenerator';
 
 const ENEMY_SPRITES = ['👹', '👻', '🧟', '🐺', '🦇', '🕷️', '🐍'];
 const NPC_SPRITES = ['👨', '👩', '🧙', '🧙‍♀️', '🧝', '🧝‍♀️', '👴', '👵'];
@@ -69,6 +70,7 @@ export async function generateRoom(
   biomeKey: string,
   storyContext: string | null,
   previousRoomType?: string,
+  storyMode?: 'inspiration' | 'recreation' | 'continuation',
 ): Promise<Room> {
   // Use storySeed + roomNumber for consistent randomization
   const seed = storySeed + roomNumber * 1000;
@@ -160,6 +162,12 @@ export async function generateRoom(
       const offsetX = (Math.random() - 0.5) * 40;
       const offsetY = (Math.random() - 0.5) * 40;
 
+      // Generate story-aware NPC description (we'll use this in roomSpriteEnhancer)
+      // For now, use generic but mark for AI enhancement
+      const interactionText = storyContext
+        ? await generateNPCInteractionText('npc', roomNumber, storyContext, storyMode || 'inspiration')
+        : 'A traveler rests here';
+
       objects.push({
         id: `npc_${roomId}_${i}`,
         position: {
@@ -168,7 +176,7 @@ export async function generateRoom(
         },
         type: 'npc',
         sprite: randomChoice(NPC_SPRITES),
-        interactionText: 'A traveler rests here',
+        interactionText,
         hasInteracted: false,
       });
     }

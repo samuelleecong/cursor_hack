@@ -147,11 +147,13 @@ const App: React.FC = () => {
         gameState.storySeed,
         0,
         biomeKey,
-        gameState.storyContext
+        gameState.storyContext,
+        undefined,
+        gameState.storyMode
       );
     }
-    
-    initialRoom = await enhanceRoomWithSprites(initialRoom, biomeKey, gameState.storyContext);
+
+    initialRoom = await enhanceRoomWithSprites(initialRoom, biomeKey, gameState.storyContext, 0, gameState.storyMode);
     roomCache.saveRoom(initialRoom);
 
     const rooms = new Map<string, Room>();
@@ -211,11 +213,13 @@ const App: React.FC = () => {
           gameState.storySeed,
           newRoomCounter,
           biomeKey,
-          gameState.storyContext
+          gameState.storyContext,
+          undefined,
+          gameState.storyMode
         );
       }
-      
-      newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext);
+
+      newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext, newRoomCounter, gameState.storyMode);
       roomCache.saveRoom(newRoom);
 
       const newRooms = new Map(gameState.rooms);

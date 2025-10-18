@@ -5,6 +5,7 @@
 /* tslint:disable */
 import { GameObject, Room } from '../types';
 import { generateEnemySprite, generateNPCSprite, generateItemSprite } from './spriteGenerator';
+import { generateNPCDescription, generateEnemyDescription } from './npcGenerator';
 
 async function preloadSpriteImage(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -18,7 +19,9 @@ async function preloadSpriteImage(url: string): Promise<void> {
 export async function enhanceRoomWithSprites(
   room: Room,
   biome: string,
-  storyContext: string | null
+  storyContext: string | null,
+  roomNumber?: number,
+  storyMode?: 'inspiration' | 'recreation' | 'continuation'
 ): Promise<Room> {
   if (room.objects.every(obj => obj.spriteUrl)) {
     console.log('[RoomSpriteEnhancer] All objects already have sprites, skipping');
@@ -26,6 +29,7 @@ export async function enhanceRoomWithSprites(
   }
 
   const enhancedObjects: GameObject[] = [];
+  const extractedRoomNumber = roomNumber ?? parseInt(room.id.split('_')[1] || '0');
 
   for (const obj of room.objects) {
     if (obj.spriteUrl) {
@@ -37,7 +41,14 @@ export async function enhanceRoomWithSprites(
 
     try {
       if (obj.type === 'enemy') {
-        const enemyDescription = `hostile creature, ${biome} monster`;
+        // Generate story-aware enemy description
+        const enemyDescription = await generateEnemyDescription(
+          extractedRoomNumber,
+          biome,
+          obj.enemyLevel || 1,
+          storyContext,
+          storyMode || 'inspiration'
+        );
         const sprite = await generateEnemySprite(
           enemyDescription,
           biome,
@@ -47,7 +58,13 @@ export async function enhanceRoomWithSprites(
         );
         enhancedObj.spriteUrl = sprite.url || undefined;
       } else if (obj.type === 'npc') {
-        const npcDescription = 'traveler, friendly character';
+        // Generate story-aware NPC description
+        const npcDescription = await generateNPCDescription(
+          extractedRoomNumber,
+          biome,
+          storyContext,
+          storyMode || 'inspiration'
+        );
         const sprite = await generateNPCSprite(
           npcDescription,
           biome,
@@ -89,13 +106,21 @@ export async function enhanceRoomWithSprites(
 export async function enhanceObjectWithSprite(
   obj: GameObject,
   biome: string,
-  storyContext?: string
+  storyContext?: string,
+  roomNumber?: number,
+  storyMode?: 'inspiration' | 'recreation' | 'continuation'
 ): Promise<GameObject> {
   const enhanced = { ...obj };
 
   try {
     if (obj.type === 'enemy') {
-      const enemyDescription = `hostile creature, ${biome} monster`;
+      const enemyDescription = await generateEnemyDescription(
+        roomNumber || 0,
+        biome,
+        obj.enemyLevel || 1,
+        storyContext || null,
+        storyMode || 'inspiration'
+      );
       const sprite = await generateEnemySprite(
         enemyDescription,
         biome,
@@ -105,7 +130,12 @@ export async function enhanceObjectWithSprite(
       );
       enhanced.spriteUrl = sprite.url || undefined;
     } else if (obj.type === 'npc') {
-      const npcDescription = 'traveler, friendly character';
+      const npcDescription = await generateNPCDescription(
+        roomNumber || 0,
+        biome,
+        storyContext || null,
+        storyMode || 'inspiration'
+      );
       const sprite = await generateNPCSprite(
         npcDescription,
         biome,
