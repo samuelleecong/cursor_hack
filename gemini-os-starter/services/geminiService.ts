@@ -4,7 +4,7 @@
 */
 /* tslint:disable */
 import {GoogleGenAI} from '@google/genai';
-import {APP_DEFINITIONS_CONFIG, getSystemPrompt} from '../constants'; // Import getSystemPrompt and APP_DEFINITIONS_CONFIG
+import {getSystemPrompt} from '../constants';
 import {InteractionData} from '../types';
 
 if (!process.env.API_KEY) {
@@ -20,6 +20,9 @@ const ai = new GoogleGenAI({apiKey: process.env.API_KEY!}); // The "!" asserts A
 export async function* streamAppContent(
   interactionHistory: InteractionData[],
   currentMaxHistoryLength: number, // Receive current max history length
+  characterClass?: string,
+  characterHP?: number,
+  storySeed?: number,
 ): AsyncGenerator<string, void, void> {
   const model = 'gemini-2.5-flash-lite'; // Updated model
 
@@ -38,7 +41,7 @@ export async function* streamAppContent(
     return;
   }
 
-  const systemPrompt = getSystemPrompt(currentMaxHistoryLength); // Generate system prompt dynamically
+  const systemPrompt = getSystemPrompt(currentMaxHistoryLength, characterClass, characterHP, storySeed); // Generate system prompt dynamically with game context
 
   const currentInteraction = interactionHistory[0];
   // pastInteractions already respects currentMaxHistoryLength due to slicing in App.tsx
@@ -48,36 +51,20 @@ export async function* streamAppContent(
     currentInteraction.elementText ||
     currentInteraction.id ||
     'Unknown Element';
-  let currentInteractionSummary = `Current User Interaction: Clicked on '${currentElementName}' (Type: ${currentInteraction.type || 'N/A'}, ID: ${currentInteraction.id || 'N/A'}).`;
+  let currentInteractionSummary = `Current Player Action: ${currentElementName} (Type: ${currentInteraction.type || 'N/A'}, ID: ${currentInteraction.id || 'N/A'}).`;
   if (currentInteraction.value) {
     currentInteractionSummary += ` Associated value: '${currentInteraction.value.substring(0, 100)}'.`;
   }
 
-  const currentAppDef = APP_DEFINITIONS_CONFIG.find(
-    (app) => app.id === currentInteraction.appContext,
-  );
-  const currentAppContext = currentInteraction.appContext
-    ? `Current App Context: '${currentAppDef?.name || currentInteraction.appContext}'.`
-    : 'No specific app context for current interaction.';
-
   let historyPromptSegment = '';
   if (pastInteractions.length > 0) {
-    // The number of previous interactions to mention in the prompt text.
-    const numPrevInteractionsToMention =
-      currentMaxHistoryLength - 1 > 0 ? currentMaxHistoryLength - 1 : 0;
-    historyPromptSegment = `\n\nPrevious User Interactions (up to ${numPrevInteractionsToMention} most recent, oldest first in this list segment but chronologically before current):`;
+    historyPromptSegment = `\n\nPrevious Player Actions (most recent first):`;
 
-    // Iterate over the pastInteractions array, which is already correctly sized
+    // Iterate over the pastInteractions array
     pastInteractions.forEach((interaction, index) => {
       const pastElementName =
         interaction.elementText || interaction.id || 'Unknown Element';
-      const appDef = APP_DEFINITIONS_CONFIG.find(
-        (app) => app.id === interaction.appContext,
-      );
-      const appName = interaction.appContext
-        ? appDef?.name || interaction.appContext
-        : 'N/A';
-      historyPromptSegment += `\n${index + 1}. (App: ${appName}) Clicked '${pastElementName}' (Type: ${interaction.type || 'N/A'}, ID: ${interaction.id || 'N/A'})`;
+      historyPromptSegment += `\n${index + 1}. ${pastElementName} (Type: ${interaction.type || 'N/A'}, ID: ${interaction.id || 'N/A'})`;
       if (interaction.value) {
         historyPromptSegment += ` with value '${interaction.value.substring(0, 50)}'`;
       }
@@ -88,13 +75,12 @@ export async function* streamAppContent(
   const fullPrompt = `${systemPrompt}
 
 ${currentInteractionSummary}
-${currentAppContext}
 ${historyPromptSegment}
 
-Full Context for Current Interaction (for your reference, primarily use summaries and history):
+Full Context for Current Interaction (for your reference):
 ${JSON.stringify(currentInteraction, null, 1)}
 
-Generate the HTML content for the window's content area only:`;
+Generate the HTML content for the game story scene:`;
 
   try {
     const response = await ai.models.generateContentStream({

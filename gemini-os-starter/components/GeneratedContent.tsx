@@ -43,6 +43,13 @@ export const GeneratedContent: React.FC<GeneratedContentProps> = ({
         let interactionValue: string | undefined =
           targetElement.dataset.interactionValue;
 
+        // Check for damage or heal values
+        if (targetElement.dataset.damage) {
+          interactionValue = targetElement.dataset.damage;
+        } else if (targetElement.dataset.heal) {
+          interactionValue = targetElement.dataset.heal;
+        }
+
         if (targetElement.dataset.valueFrom) {
           const inputElement = document.getElementById(
             targetElement.dataset.valueFrom,

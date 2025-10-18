@@ -4,45 +4,52 @@
 */
 /* tslint:disable */
 import React, {useCallback, useEffect, useState} from 'react';
+import {AnimationOverlay} from './components/AnimationOverlay';
+import {CharacterSelection} from './components/CharacterSelection';
+import {GameCanvas} from './components/GameCanvas';
+import {GameHUD} from './components/GameHUD';
 import {GeneratedContent} from './components/GeneratedContent';
-import {Icon} from './components/Icon';
-import {ParametersPanel} from './components/ParametersPanel';
 import {Window} from './components/Window';
-import {APP_DEFINITIONS_CONFIG, INITIAL_MAX_HISTORY_LENGTH} from './constants';
+import {CHARACTER_CLASSES} from './characterClasses';
+import {INITIAL_MAX_HISTORY_LENGTH} from './constants';
 import {streamAppContent} from './services/geminiService';
-import {AppDefinition, InteractionData} from './types';
-
-const DesktopView: React.FC<{onAppOpen: (app: AppDefinition) => void}> = ({
-  onAppOpen,
-}) => (
-  <div className="flex flex-wrap content-start p-4">
-    {APP_DEFINITIONS_CONFIG.map((app) => (
-      <Icon key={app.id} app={app} onInteract={() => onAppOpen(app)} />
-    ))}
-  </div>
-);
+import {generateRoom} from './services/roomGenerator';
+import {
+  GameState,
+  InteractionData,
+  Position,
+  GameObject,
+  Room,
+  GameAnimation,
+} from './types';
+import {CharacterClass} from './characterClasses';
 
 const App: React.FC = () => {
-  const [activeApp, setActiveApp] = useState<AppDefinition | null>(null);
-  const [previousActiveApp, setPreviousActiveApp] =
-    useState<AppDefinition | null>(null);
+  // Game state
+  const [gameState, setGameState] = useState<GameState>({
+    selectedCharacter: null,
+    currentHP: 0,
+    isAlive: true,
+    storySeed: Math.floor(Math.random() * 10000),
+    isInGame: false,
+    playerPosition: {x: 400, y: 300},
+    currentRoomId: 'room_0',
+    rooms: new Map(),
+    roomCounter: 0,
+    currentAnimation: null,
+  });
+
   const [llmContent, setLlmContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [interactionHistory, setInteractionHistory] = useState<
     InteractionData[]
   >([]);
-  const [isParametersOpen, setIsParametersOpen] = useState<boolean>(false);
   const [currentMaxHistoryLength, setCurrentMaxHistoryLength] =
     useState<number>(INITIAL_MAX_HISTORY_LENGTH);
-
-  // Statefulness feature state
-  const [isStatefulnessEnabled, setIsStatefulnessEnabled] =
-    useState<boolean>(false);
-  const [appContentCache, setAppContentCache] = useState<
-    Record<string, string>
-  >({});
-  const [currentAppPath, setCurrentAppPath] = useState<string[]>([]); // For UI graph statefulness
+  const [showAIDialog, setShowAIDialog] = useState<boolean>(false);
+  const [currentInteractingObject, setCurrentInteractingObject] =
+    useState<GameObject | null>(null);
 
   const internalHandleLlmRequest = useCallback(
     async (historyForLlm: InteractionData[], maxHistoryLength: number) => {
@@ -55,12 +62,15 @@ const App: React.FC = () => {
       setError(null);
 
       let accumulatedContent = '';
-      // Clear llmContent before streaming new content only if not loading from cache
-      // This is now handled before this function is called (in handleAppOpen/handleInteraction)
-      // setLlmContent(''); // Removed from here, set by caller if needed
 
       try {
-        const stream = streamAppContent(historyForLlm, maxHistoryLength);
+        const stream = streamAppContent(
+          historyForLlm,
+          maxHistoryLength,
+          gameState.selectedCharacter?.name,
+          gameState.currentHP,
+          gameState.storySeed,
+        );
         for await (const chunk of stream) {
           accumulatedContent += chunk;
           setLlmContent((prev) => prev + chunk);
@@ -72,43 +82,218 @@ const App: React.FC = () => {
         setLlmContent(accumulatedContent);
       } finally {
         setIsLoading(false);
-        // Caching logic is now in useEffect watching llmContent, isLoading, activeApp, currentAppPath etc.
       }
+    },
+    [gameState.selectedCharacter, gameState.currentHP, gameState.storySeed],
+  );
+
+  // Handle character selection
+  const handleCharacterSelect = useCallback(
+    (character: CharacterClass) => {
+      const storySeed = Math.floor(Math.random() * 10000);
+
+      // Generate first room
+      const firstRoom = generateRoom('room_0', storySeed, 0);
+      const roomsMap = new Map<string, Room>();
+      roomsMap.set('room_0', firstRoom);
+
+      const newGameState: GameState = {
+        selectedCharacter: character,
+        currentHP: character.startingHP,
+        isAlive: true,
+        storySeed,
+        isInGame: true,
+        playerPosition: {x: 100, y: 300}, // Start on left side
+        currentRoomId: 'room_0',
+        rooms: roomsMap,
+        roomCounter: 0,
+      };
+      setGameState(newGameState);
+      setInteractionHistory([]);
+      setLlmContent('');
+      setError(null);
+      setShowAIDialog(false);
     },
     [],
   );
 
-  // Effect to cache content when loading finishes and statefulness is enabled
-  useEffect(() => {
-    if (
-      !isLoading &&
-      currentAppPath.length > 0 &&
-      isStatefulnessEnabled &&
-      llmContent
-    ) {
-      const cacheKey = currentAppPath.join('__');
-      // Update cache if content is different or not yet cached for this path
-      if (appContentCache[cacheKey] !== llmContent) {
-        setAppContentCache((prevCache) => ({
-          ...prevCache,
-          [cacheKey]: llmContent,
-        }));
-      }
-    }
-  }, [
-    llmContent,
-    isLoading,
-    currentAppPath,
-    isStatefulnessEnabled,
-    appContentCache,
-  ]);
+  // Handle player movement
+  const handlePlayerMove = useCallback((newPosition: Position) => {
+    setGameState((prev) => ({
+      ...prev,
+      playerPosition: newPosition,
+    }));
+  }, []);
 
-  const handleInteraction = useCallback(
+  // Handle screen exit (moving to edge)
+  const handleScreenExit = useCallback(
+    (direction: 'right' | 'left' | 'up' | 'down') => {
+      setGameState((prev) => {
+        const newRoomCounter = prev.roomCounter + 1;
+        const newRoomId = `room_${newRoomCounter}`;
+
+        // Generate new room
+        const newRoom = generateRoom(
+          newRoomId,
+          prev.storySeed,
+          newRoomCounter,
+        );
+
+        const newRooms = new Map(prev.rooms);
+        newRooms.set(newRoomId, newRoom);
+
+        // Set new player position based on exit direction
+        let newPosition: Position;
+        switch (direction) {
+          case 'right':
+            newPosition = {x: 100, y: 300}; // Enter from left
+            break;
+          case 'left':
+            newPosition = {x: 700, y: 300}; // Enter from right
+            break;
+          case 'up':
+            newPosition = {x: 400, y: 550}; // Enter from bottom
+            break;
+          case 'down':
+            newPosition = {x: 400, y: 50}; // Enter from top
+            break;
+        }
+
+        return {
+          ...prev,
+          currentRoomId: newRoomId,
+          playerPosition: newPosition,
+          rooms: newRooms,
+          roomCounter: newRoomCounter,
+        };
+      });
+    },
+    [],
+  );
+
+  // Handle object interaction
+  const handleObjectInteract = useCallback(
+    (object: GameObject) => {
+      setCurrentInteractingObject(object);
+
+      // Mark object as interacted
+      setGameState((prev) => {
+        const room = prev.rooms.get(prev.currentRoomId);
+        if (!room) return prev;
+
+        const updatedObjects = room.objects.map((obj) =>
+          obj.id === object.id ? {...obj, hasInteracted: true} : obj,
+        );
+
+        const updatedRoom = {...room, objects: updatedObjects};
+        const newRooms = new Map(prev.rooms);
+        newRooms.set(prev.currentRoomId, updatedRoom);
+
+        return {...prev, rooms: newRooms};
+      });
+
+      // Create interaction data for AI
+      const interactionData: InteractionData = {
+        id: object.id,
+        type: object.type,
+        elementText: `${object.interactionText} (${object.sprite})`,
+        elementType: 'game_object',
+        appContext: 'roguelike_game',
+      };
+
+      const newHistory = [
+        interactionData,
+        ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
+      ];
+      setInteractionHistory(newHistory);
+      setLlmContent('');
+      setError(null);
+      setShowAIDialog(true);
+
+      internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
+    },
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest],
+  );
+
+  // Handle AI dialog interaction (choice buttons in AI response)
+  const handleAIDialogInteraction = useCallback(
     async (interactionData: InteractionData) => {
-      if (interactionData.id === 'app_close_button') {
-        // This specific ID might not be generated by LLM
-        handleCloseAppView(); // Use existing close logic
+      // Check for death
+      if (
+        interactionData.id === 'player_death' ||
+        interactionData.type === 'death'
+      ) {
+        setGameState((prev) => ({...prev, isAlive: false}));
+        setShowAIDialog(false);
         return;
+      }
+
+      // Check for conclude action - close dialog and return to exploration
+      if (interactionData.type === 'conclude') {
+        setShowAIDialog(false);
+        setLlmContent('');
+        setCurrentInteractingObject(null);
+        return;
+      }
+
+      // Handle animations based on interaction type
+      const damageValue = interactionData.value
+        ? parseInt(interactionData.value)
+        : undefined;
+
+      if (
+        interactionData.type === 'combat' ||
+        interactionData.type === 'damage'
+      ) {
+        const damage = damageValue || 10;
+        setGameState((prev) => {
+          const newHP = Math.max(0, prev.currentHP - damage);
+          return {
+            ...prev,
+            currentHP: newHP,
+            currentAnimation: {
+              type: 'damage',
+              value: damage,
+              text: interactionData.elementText,
+              timestamp: Date.now(),
+            },
+            isAlive: newHP > 0,
+          };
+        });
+      } else if (interactionData.type === 'heal') {
+        const healAmount = damageValue || 15;
+        setGameState((prev) => {
+          const maxHP = prev.selectedCharacter?.startingHP || 100;
+          const newHP = Math.min(maxHP, prev.currentHP + healAmount);
+          return {
+            ...prev,
+            currentHP: newHP,
+            currentAnimation: {
+              type: 'heal',
+              value: healAmount,
+              text: interactionData.elementText,
+              timestamp: Date.now(),
+            },
+          };
+        });
+      } else if (interactionData.type === 'loot') {
+        setGameState((prev) => ({
+          ...prev,
+          currentAnimation: {
+            type: 'loot',
+            text: interactionData.elementText,
+            timestamp: Date.now(),
+          },
+        }));
+      } else if (interactionData.type === 'dialogue') {
+        setGameState((prev) => ({
+          ...prev,
+          currentAnimation: {
+            type: 'dialogue',
+            text: interactionData.elementText,
+            timestamp: Date.now(),
+          },
+        }));
       }
 
       const newHistory = [
@@ -117,168 +302,156 @@ const App: React.FC = () => {
       ];
       setInteractionHistory(newHistory);
 
-      const newPath = activeApp
-        ? [...currentAppPath, interactionData.id]
-        : [interactionData.id];
-      setCurrentAppPath(newPath);
-      const cacheKey = newPath.join('__');
-
       setLlmContent('');
       setError(null);
 
-      if (isStatefulnessEnabled && appContentCache[cacheKey]) {
-        setLlmContent(appContentCache[cacheKey]);
-        setIsLoading(false);
-      } else {
-        internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
-      }
+      internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
     },
-    [
-      interactionHistory,
-      internalHandleLlmRequest,
-      activeApp,
-      currentMaxHistoryLength,
-      currentAppPath,
-      isStatefulnessEnabled,
-      appContentCache,
-    ],
+    [interactionHistory, internalHandleLlmRequest, currentMaxHistoryLength],
   );
 
-  const handleAppOpen = (app: AppDefinition) => {
-    const initialInteraction: InteractionData = {
-      id: app.id,
-      type: 'app_open',
-      elementText: app.name,
-      elementType: 'icon',
-      appContext: app.id,
-    };
-
-    const newHistory = [initialInteraction];
-    setInteractionHistory(newHistory);
-
-    const appPath = [app.id];
-    setCurrentAppPath(appPath);
-    const cacheKey = appPath.join('__');
-
-    if (isParametersOpen) {
-      setIsParametersOpen(false);
-    }
-    setActiveApp(app);
+  // Close AI dialog
+  const handleCloseAIDialog = useCallback(() => {
+    setShowAIDialog(false);
     setLlmContent('');
-    setError(null);
+    setCurrentInteractingObject(null);
+  }, []);
 
-    if (isStatefulnessEnabled && appContentCache[cacheKey]) {
-      setLlmContent(appContentCache[cacheKey]);
-      setIsLoading(false);
-    } else {
-      internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
-    }
-  };
+  // Clear animation
+  const handleAnimationComplete = useCallback(() => {
+    setGameState((prev) => ({...prev, currentAnimation: null}));
+  }, []);
 
-  const handleCloseAppView = () => {
-    setActiveApp(null);
+  // Handle game restart after death
+  const handleRestart = useCallback(() => {
+    setGameState({
+      selectedCharacter: null,
+      currentHP: 0,
+      isAlive: true,
+      storySeed: Math.floor(Math.random() * 10000),
+      isInGame: false,
+      playerPosition: {x: 400, y: 300},
+      currentRoomId: 'room_0',
+      rooms: new Map(),
+      roomCounter: 0,
+      currentAnimation: null,
+    });
     setLlmContent('');
     setError(null);
     setInteractionHistory([]);
-    setCurrentAppPath([]);
-  };
+    setShowAIDialog(false);
+    setCurrentInteractingObject(null);
+  }, []);
 
-  const handleToggleParametersPanel = () => {
-    setIsParametersOpen((prevIsOpen) => {
-      const nowOpeningParameters = !prevIsOpen;
-      if (nowOpeningParameters) {
-        // Store the currently active app (if any) so it can be restored,
-        // or null if no app is active (desktop view).
-        setPreviousActiveApp(activeApp);
-        setActiveApp(null); // Clear active app to show parameters panel
-        setLlmContent('');
-        setError(null);
-        // Interaction history and current path are not cleared here,
-        // as they might be relevant if the user returns to an app.
-      } else {
-        // Closing parameters panel - always go back to desktop view
-        setPreviousActiveApp(null); // Clear any stored previous app
-        setActiveApp(null); // Ensure desktop view
-        setLlmContent('');
-        setError(null);
-        setInteractionHistory([]); // Clear history when returning to desktop from parameters
-        setCurrentAppPath([]); // Clear app path
-      }
-      return nowOpeningParameters;
-    });
-  };
+  // Get current room
+  const currentRoom = gameState.rooms.get(gameState.currentRoomId);
 
-  const handleUpdateHistoryLength = (newLength: number) => {
-    setCurrentMaxHistoryLength(newLength);
-    // Trim interaction history if new length is shorter
-    setInteractionHistory((prev) => prev.slice(0, newLength));
-  };
-
-  const handleSetStatefulness = (enabled: boolean) => {
-    setIsStatefulnessEnabled(enabled);
-    if (!enabled) {
-      setAppContentCache({});
-    }
-  };
-
-  const windowTitle = isParametersOpen
-    ? 'Gemini Computer'
-    : activeApp
-      ? activeApp.name
-      : 'Gemini Computer';
-  const contentBgColor = '#ffffff';
-
-  const handleMasterClose = () => {
-    if (isParametersOpen) {
-      handleToggleParametersPanel();
-    } else if (activeApp) {
-      handleCloseAppView();
-    }
-  };
+  const windowTitle = gameState.isInGame
+    ? `${gameState.selectedCharacter?.name}'s Adventure`
+    : 'Roguelike RPG';
+  const contentBgColor = '#1f2937';
 
   return (
-    <div className="bg-white w-full min-h-screen flex items-center justify-center p-4">
+    <div className="bg-gray-900 w-full min-h-screen flex items-center justify-center p-4">
+      <AnimationOverlay
+        animation={gameState.currentAnimation}
+        onComplete={handleAnimationComplete}
+      />
       <Window
         title={windowTitle}
-        onClose={handleMasterClose}
-        isAppOpen={!!activeApp && !isParametersOpen}
-        appId={activeApp?.id}
-        onToggleParameters={handleToggleParametersPanel}
-        onExitToDesktop={handleCloseAppView}
-        isParametersPanelOpen={isParametersOpen}>
+        onClose={handleRestart}
+        isAppOpen={gameState.isInGame}
+        appId="roguelike_game"
+        onToggleParameters={() => {}}
+        onExitToDesktop={handleRestart}
+        isParametersPanelOpen={false}>
         <div
-          className="w-full h-full"
+          className="w-full h-full flex flex-col"
           style={{backgroundColor: contentBgColor}}>
-          {isParametersOpen ? (
-            <ParametersPanel
-              currentLength={currentMaxHistoryLength}
-              onUpdateHistoryLength={handleUpdateHistoryLength}
-              onClosePanel={handleToggleParametersPanel}
-              isStatefulnessEnabled={isStatefulnessEnabled}
-              onSetStatefulness={handleSetStatefulness}
+          {!gameState.isInGame ? (
+            <CharacterSelection
+              characters={CHARACTER_CLASSES}
+              onSelectCharacter={handleCharacterSelect}
             />
-          ) : !activeApp ? (
-            <DesktopView onAppOpen={handleAppOpen} />
+          ) : !gameState.isAlive ? (
+            <div className="flex flex-col items-center justify-center h-full p-8 bg-gradient-to-b from-red-900 to-black">
+              <div className="text-8xl mb-6">💀</div>
+              <h1 className="text-5xl font-bold text-red-400 mb-4">
+                Game Over
+              </h1>
+              <p className="text-xl text-gray-300 mb-8 text-center max-w-md">
+                Your journey has come to an end. But every death brings a new
+                story...
+              </p>
+              <button
+                onClick={handleRestart}
+                className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-bold text-lg rounded-lg transition-all duration-200 transform hover:scale-105">
+                Begin a New Adventure
+              </button>
+            </div>
           ) : (
             <>
-              {isLoading && llmContent.length === 0 && (
-                <div className="flex justify-center items-center h-full">
-                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-                </div>
-              )}
-              {error && (
-                <div className="p-4 text-red-600 bg-red-100 rounded-md">
-                  {error}
-                </div>
-              )}
-              {(!isLoading || llmContent) && (
-                <GeneratedContent
-                  htmlContent={llmContent}
-                  onInteract={handleInteraction}
-                  appContext={activeApp.id}
-                  isLoading={isLoading}
+              {gameState.selectedCharacter && (
+                <GameHUD
+                  character={gameState.selectedCharacter}
+                  currentHP={gameState.currentHP}
                 />
               )}
+              <div className="flex-1 overflow-hidden bg-gray-900 relative">
+                {currentRoom && gameState.selectedCharacter && (
+                  <GameCanvas
+                    character={gameState.selectedCharacter}
+                    playerPosition={gameState.playerPosition}
+                    objects={currentRoom.objects}
+                    onMove={handlePlayerMove}
+                    onInteract={handleObjectInteract}
+                    onScreenExit={handleScreenExit}
+                    roomDescription={currentRoom.description}
+                  />
+                )}
+
+                {/* AI Dialog Overlay */}
+                {showAIDialog && (
+                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-8 z-10">
+                    <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[80%] overflow-y-auto border-4 border-blue-500 shadow-2xl">
+                      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 flex justify-between items-center">
+                        <h3 className="text-xl font-bold text-white">
+                          {currentInteractingObject?.sprite}{' '}
+                          {currentInteractingObject?.interactionText}
+                        </h3>
+                        <button
+                          onClick={handleCloseAIDialog}
+                          className="text-white hover:text-red-400 font-bold text-2xl">
+                          ✕
+                        </button>
+                      </div>
+                      <div className="p-6">
+                        {isLoading && llmContent.length === 0 && (
+                          <div className="flex flex-col justify-center items-center py-12">
+                            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
+                            <p className="text-gray-400">
+                              Generating story...
+                            </p>
+                          </div>
+                        )}
+                        {error && (
+                          <div className="p-4 text-red-300 bg-red-900/50 rounded-md border border-red-700">
+                            {error}
+                          </div>
+                        )}
+                        {(!isLoading || llmContent) && (
+                          <GeneratedContent
+                            htmlContent={llmContent}
+                            onInteract={handleAIDialogInteraction}
+                            appContext="roguelike_game"
+                            isLoading={isLoading}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
