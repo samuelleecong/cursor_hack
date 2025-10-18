@@ -15,8 +15,13 @@ const NEGATIVE_PROMPT = 'blurry, 3D, realistic, photograph, low quality, modern,
 
 export interface ImageGenerationParams {
   prompt: string;
-  type: 'character' | 'enemy' | 'background' | 'item' | 'npc';
+  type: 'character' | 'enemy' | 'background' | 'item' | 'npc' | 'scene' | 'panorama';
   size?: 'small' | 'medium' | 'large';
+  customDimensions?: { width: number; height: number };
+  referenceImage?: string | Blob; // Data URL, Blob, or URL for image-to-image
+  referenceImages?: Array<string | Blob>; // Multiple references for dual anchor system (Nano Banana only)
+  imageStrength?: number; // How closely to follow the reference (0-1, default 0.5)
+  useNanoBanana?: boolean; // Use Gemini 2.5 Flash Image (Nano Banana) instead of Flux
 }
 
 export interface GeneratedImage {
@@ -29,6 +34,14 @@ export interface GeneratedImage {
 function getImageSize(type: string, sizePreference?: string): { width: number; height: number } {
   if (type === 'background') {
     return { width: 1024, height: 576 }; // 16:9 aspect ratio for backgrounds
+  }
+
+  if (type === 'scene') {
+    return { width: 1000, height: 800 }; // Scene dimensions matching viewport
+  }
+
+  if (type === 'panorama') {
+    return { width: 2000, height: 800 }; // Panorama for dual scenes
   }
 
   if (sizePreference === 'small') {
@@ -45,33 +58,151 @@ function getImageSize(type: string, sizePreference?: string): { width: number; h
 /**
  * Generate a single pixel art image using fal.ai
  */
+/**
+ * Convert custom dimensions to closest supported Nano Banana aspect ratio
+ * Supported: 21:9, 1:1, 4:3, 3:2, 2:3, 5:4, 4:5, 3:4, 16:9, 9:16
+ */
+function getAspectRatio(width: number, height: number): string {
+  const ratio = width / height;
+
+  // Map of supported aspect ratios with their decimal values
+  const aspectRatios: { [key: string]: number } = {
+    '21:9': 21 / 9,  // ~2.33
+    '16:9': 16 / 9,  // ~1.78
+    '5:4': 5 / 4,    // 1.25
+    '4:3': 4 / 3,    // ~1.33
+    '3:2': 3 / 2,    // 1.5
+    '1:1': 1,        // 1.0
+    '2:3': 2 / 3,    // ~0.67
+    '3:4': 3 / 4,    // 0.75
+    '4:5': 4 / 5,    // 0.8
+    '9:16': 9 / 16,  // ~0.56
+  };
+
+  // Find the closest aspect ratio
+  let closestRatio = '1:1';
+  let smallestDiff = Infinity;
+
+  for (const [name, value] of Object.entries(aspectRatios)) {
+    const diff = Math.abs(ratio - value);
+    if (diff < smallestDiff) {
+      smallestDiff = diff;
+      closestRatio = name;
+    }
+  }
+
+  console.log(`[falService] Mapped ${width}x${height} (ratio ${ratio.toFixed(2)}) to aspect ratio ${closestRatio}`);
+  return closestRatio;
+}
+
 export async function generatePixelArt(params: ImageGenerationParams): Promise<GeneratedImage> {
-  const { prompt, type, size = 'medium' } = params;
+  const {
+    prompt,
+    type,
+    size = 'medium',
+    customDimensions,
+    referenceImage,
+    referenceImages,
+    imageStrength = 0.75,
+    useNanoBanana = false // Default to Flux for backward compatibility
+  } = params;
 
   // Build full prompt with pixel art styling
   const fullPrompt = `${prompt}, ${PIXEL_ART_STYLE}`;
 
-  const dimensions = getImageSize(type, size);
+  const dimensions = customDimensions || getImageSize(type, size);
 
   try {
-    const result = await fal.subscribe('fal-ai/flux/schnell', {
-      input: {
+    let result: any;
+
+    if (useNanoBanana) {
+      // Use Gemini 2.5 Flash Image (Nano Banana)
+      console.log(`[falService] Using Nano Banana (Gemini 2.5 Flash Image) for ${type}`);
+
+      // Convert dimensions to valid aspect ratio
+      const aspectRatio = getAspectRatio(dimensions.width, dimensions.height);
+
+      // Handle multiple references (dual anchor system) or single reference
+      const referencesToProcess = referenceImages || (referenceImage ? [referenceImage] : null);
+
+      if (referencesToProcess) {
+        // Image-to-Image with Nano Banana (supports multiple references)
+        console.log(`[falService] Nano Banana img2img with ${referencesToProcess.length} reference image(s)`);
+
+        // Upload all Blobs and collect URLs
+        const imageUrls: string[] = [];
+        for (const ref of referencesToProcess) {
+          if (ref instanceof Blob) {
+            console.log(`[falService] Uploading Blob to fal.ai storage (${ref.size} bytes)...`);
+            const uploadedFile = await fal.storage.upload(ref);
+            imageUrls.push(uploadedFile);
+            console.log(`[falService] Blob uploaded: ${uploadedFile.substring(0, 60)}...`);
+          } else {
+            imageUrls.push(ref); // Use URL/data URI directly
+          }
+        }
+
+        console.log(`[falService] Using ${imageUrls.length} reference images for dual anchor system`);
+
+        result = await fal.subscribe('fal-ai/gemini-25-flash-image/edit', {
+          input: {
+            prompt: fullPrompt,
+            image_urls: imageUrls, // Multiple references for anchoring
+            aspect_ratio: aspectRatio,
+            num_images: 1,
+          },
+          logs: false,
+          onQueueUpdate: (update) => {
+            if (update.status === 'IN_PROGRESS') {
+              console.log(`Nano Banana generating ${type}: ${update.logs?.map(l => l.message).join(' ')}`);
+            }
+          },
+        });
+      } else {
+        // Text-to-Image with Nano Banana
+        result = await fal.subscribe('fal-ai/gemini-25-flash-image', {
+          input: {
+            prompt: fullPrompt,
+            aspect_ratio: aspectRatio,
+            num_images: 1,
+          },
+          logs: false,
+          onQueueUpdate: (update) => {
+            if (update.status === 'IN_PROGRESS') {
+              console.log(`Nano Banana generating ${type}: ${update.logs?.map(l => l.message).join(' ')}`);
+            }
+          },
+        });
+      }
+    } else {
+      // Use Flux Schnell (original implementation)
+      const inputConfig: any = {
         prompt: fullPrompt,
         image_size: {
           width: dimensions.width,
           height: dimensions.height,
         },
-        num_inference_steps: 4, // Fast generation
+        num_inference_steps: referenceImage ? 8 : 4,
         num_images: 1,
         enable_safety_checker: false,
-      },
-      logs: false,
-      onQueueUpdate: (update) => {
-        if (update.status === 'IN_PROGRESS') {
-          console.log(`Generating ${type}: ${update.logs?.map(l => l.message).join(' ')}`);
-        }
-      },
-    });
+      };
+
+      if (referenceImage) {
+        inputConfig.image_url = referenceImage;
+        inputConfig.strength = imageStrength;
+        console.log(`[falService] Using reference image with strength ${imageStrength}`);
+      }
+
+      result = await fal.subscribe('fal-ai/flux/schnell', {
+        input: inputConfig,
+        logs: false,
+        onQueueUpdate: (update) => {
+          if (update.status === 'IN_PROGRESS') {
+            console.log(`Generating ${type}: ${update.logs?.map(l => l.message).join(' ')}`);
+          }
+        },
+      });
+    }
 
     console.log('[falService] Raw result from fal.ai:', result);
 

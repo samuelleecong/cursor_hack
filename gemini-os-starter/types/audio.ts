@@ -7,8 +7,9 @@ import { Room, StoryMode, StoryConsequence, BattleState } from './index';
 
 /**
  * Available music generation models on fal.ai
+ * Note: stable-audio removed due to 404 errors, using cassetteai for all music types
  */
-export type MusicModel = 'cassetteai' | 'stable-audio' | 'minimax';
+export type MusicModel = 'cassetteai' | 'minimax';
 
 /**
  * Audio context types for different game situations

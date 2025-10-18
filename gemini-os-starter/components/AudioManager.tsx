@@ -33,11 +33,19 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
     isPlaying,
     isLoading,
     currentTrack,
+    mainTheme,
+    overlayTrack,
     error,
     play,
     pause,
     setVolume: setAudioVolume,
     changeMusic,
+    loadMainTheme,
+    playOverlay,
+    stopOverlay,
+    duckMainTheme,
+    restoreMainTheme,
+    stopMainTheme,
   } = useBackgroundMusic({
     enabled: musicEnabled,
     volume,
@@ -46,9 +54,9 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
   });
 
   // Previous state refs to detect changes
-  const [prevRoomId, setPrevRoomId] = useState<string | null>(null);
   const [prevBattleState, setPrevBattleState] = useState<boolean>(false);
-  const [prevShowAIDialog, setPrevShowAIDialog] = useState<boolean>(false);
+  const [prevIsAlive, setPrevIsAlive] = useState<boolean>(true);
+  const [mainThemeLoaded, setMainThemeLoaded] = useState<boolean>(false);
 
   /**
    * Build music generation context from game state
@@ -68,82 +76,89 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
     };
   }, [gameState]);
 
-  /**
-   * Determine what audio context we should be in
-   */
-  const getCurrentAudioContext = useCallback((): AudioContext | null => {
-    // Priority order:
-    // 1. Defeat/Victory
-    if (!gameState.isAlive) return 'defeat';
-    if (gameState.battleState?.status === 'player_won') return 'victory';
-
-    // 2. Battle
-    if (gameState.battleState?.status === 'ongoing') return 'battle';
-
-    // 3. Story moment (AI dialog showing)
-    // We'll need to pass this as a prop or detect it another way
-    // For now, skip this
-
-    // 4. Room exploration
-    if (gameState.isInGame && gameState.currentRoomId) return 'room';
-
-    return null;
-  }, [gameState]);
 
   /**
-   * Handle room changes - generate new room music
+   * Load main theme after character selection
    */
   useEffect(() => {
-    if (!musicEnabled || !gameState.isInGame) return;
+    if (!musicEnabled) return;
 
-    const currentAudioContext = getCurrentAudioContext();
-
-    // Room changed
-    if (currentAudioContext === 'room' && gameState.currentRoomId !== prevRoomId) {
-      console.log('[AudioManager] Room changed, generating new music...');
+    // Load main theme when character is selected and game starts
+    if (gameState.selectedCharacter && gameState.isInGame && !mainThemeLoaded) {
+      console.log('[AudioManager] Loading main theme after character selection...');
       const context = buildMusicContext();
-      changeMusic(context, 'room');
-      setPrevRoomId(gameState.currentRoomId);
+      loadMainTheme(context);
+      setMainThemeLoaded(true);
     }
-  }, [gameState.currentRoomId, gameState.isInGame, prevRoomId, musicEnabled, getCurrentAudioContext, buildMusicContext, changeMusic]);
+  }, [gameState.selectedCharacter, gameState.isInGame, mainThemeLoaded, musicEnabled, buildMusicContext, loadMainTheme]);
 
   /**
-   * Handle battle state changes
+   * Handle battle state changes - layer battle music over main theme
    */
   useEffect(() => {
     if (!musicEnabled || !gameState.isInGame) return;
 
     const inBattle = gameState.battleState?.status === 'ongoing';
 
-    // Battle started
+    // Battle started - play overlay and duck main theme
     if (inBattle && !prevBattleState) {
-      console.log('[AudioManager] Battle started, generating battle music...');
+      console.log('[AudioManager] Battle started, layering battle music...');
       const context = buildMusicContext();
-      changeMusic(context, 'battle');
+
+      // Duck main theme to 35% volume
+      duckMainTheme(0.35);
+
+      // Play battle music overlay
+      playOverlay(context, 'battle');
     }
 
-    // Battle ended (back to room music)
+    // Battle ended - stop overlay and restore main theme
     if (!inBattle && prevBattleState && gameState.isAlive) {
-      console.log('[AudioManager] Battle ended, returning to room music...');
-      const context = buildMusicContext();
-      changeMusic(context, 'room');
+      console.log('[AudioManager] Battle ended, removing overlay...');
+
+      // Stop overlay music
+      stopOverlay();
+
+      // Restore main theme to full volume
+      restoreMainTheme();
     }
 
     setPrevBattleState(inBattle);
-  }, [gameState.battleState, gameState.isInGame, gameState.isAlive, prevBattleState, musicEnabled, buildMusicContext, changeMusic]);
+  }, [gameState.battleState, gameState.isInGame, gameState.isAlive, prevBattleState, musicEnabled, buildMusicContext, playOverlay, stopOverlay, duckMainTheme, restoreMainTheme]);
 
   /**
-   * Handle game over (defeat music)
+   * Handle character death and restart - regenerate main theme on restart
    */
   useEffect(() => {
     if (!musicEnabled) return;
 
-    if (!gameState.isAlive) {
-      console.log('[AudioManager] Player defeated, playing defeat music...');
+    // Player just died
+    if (!gameState.isAlive && prevIsAlive) {
+      console.log('[AudioManager] Player defeated, stopping main theme and playing defeat music...');
+
+      // Stop overlay if any
+      if (overlayTrack) {
+        stopOverlay();
+      }
+
+      // Stop main theme and play defeat music
+      stopMainTheme();
       const context = buildMusicContext();
       changeMusic(context, 'defeat');
+
+      setMainThemeLoaded(false);
     }
-  }, [gameState.isAlive, musicEnabled, buildMusicContext, changeMusic]);
+
+    // Player restarted after death
+    if (gameState.isAlive && !prevIsAlive && gameState.selectedCharacter && gameState.isInGame) {
+      console.log('[AudioManager] Player restarted, loading new main theme...');
+      const context = buildMusicContext();
+      loadMainTheme(context);
+      setMainThemeLoaded(true);
+    }
+
+    setPrevIsAlive(gameState.isAlive);
+  }, [gameState.isAlive, gameState.selectedCharacter, gameState.isInGame, prevIsAlive, musicEnabled, overlayTrack, buildMusicContext, changeMusic, stopMainTheme, stopOverlay, loadMainTheme]);
 
   /**
    * Toggle music on/off
@@ -250,16 +265,47 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
                 </div>
               )}
 
-              {/* Current track info */}
-              {currentTrack && musicEnabled && (
+              {/* Main theme and overlay info */}
+              {musicEnabled && (mainTheme || overlayTrack || currentTrack) && (
                 <div className="border-t border-gray-700 pt-3 mt-3">
-                  <div className="text-xs text-gray-400 mb-1">Now Playing:</div>
-                  <div className="text-xs text-purple-300 truncate" title={currentTrack.prompt}>
-                    {currentTrack.prompt.slice(0, 60)}...
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Model: {currentTrack.model}
-                  </div>
+                  {/* Main Theme */}
+                  {mainTheme && (
+                    <div className="mb-2">
+                      <div className="text-xs text-gray-400 mb-1">🎵 Main Theme:</div>
+                      <div className="text-xs text-purple-300 truncate" title={mainTheme.prompt}>
+                        {mainTheme.prompt.slice(0, 50)}...
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Model: {mainTheme.model} • {mainTheme.duration}s loop
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Battle Overlay */}
+                  {overlayTrack && (
+                    <div className="mb-2 bg-red-900/20 p-2 rounded border border-red-500/30">
+                      <div className="text-xs text-red-300 mb-1">⚔️ Battle Layer:</div>
+                      <div className="text-xs text-red-200 truncate" title={overlayTrack.prompt}>
+                        {overlayTrack.prompt.slice(0, 50)}...
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Model: {overlayTrack.model}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Legacy single track (defeat/victory) */}
+                  {currentTrack && !mainTheme && (
+                    <div>
+                      <div className="text-xs text-gray-400 mb-1">Now Playing:</div>
+                      <div className="text-xs text-purple-300 truncate" title={currentTrack.prompt}>
+                        {currentTrack.prompt.slice(0, 60)}...
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Model: {currentTrack.model}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

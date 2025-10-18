@@ -19,6 +19,7 @@ import { INITIAL_MAX_HISTORY_LENGTH } from './constants';
 import { generateCharacterClasses } from './services/classGenerator';
 import { streamAppContent } from './services/geminiService';
 import { generateRoom } from './services/roomGenerator';
+import { generateRoomPair } from './services/roomPairGenerator';
 import {
   BattleAnimation,
   BattleState,
@@ -28,6 +29,13 @@ import {
   Position,
   Room
 } from './types';
+// Voice speech components
+import { SpeakableText, DialogueBox, NPCInteraction } from './components/SpeakableText';
+import { VoiceControls } from './components/VoiceControls';
+import { SpeechButton } from './components/SpeechButton';
+
+// Track rooms currently being generated to prevent duplicate calls
+const generatingRooms = new Set<string>();
 
 // Utility Functions
 const calculateDamage = (
@@ -113,33 +121,59 @@ const App: React.FC = () => {
   }, []);
 
   // Handle character selection
-  const handleCharacterSelect = useCallback((character: CharacterClass) => {
-    // Generate initial room
-    const initialRoom = generateRoom('room_0', gameState.storySeed, 0);
-    const rooms = new Map<string, Room>();
-    rooms.set('room_0', initialRoom);
+  const handleCharacterSelect = useCallback(async (character: CharacterClass) => {
+    try {
+      setIsLoading(true);
+      console.log('[App] Generating initial room pair (0 + 1)...');
 
-    // Set player spawn position from tile map
-    const spawnPosition = initialRoom.tileMap?.spawnPoint || {x: 400, y: 300};
+      // Generate room 0 and room 1 together with panorama scene
+      const { currentRoom: room0, nextRoom: room1 } = await generateRoomPair(
+        'room_0',
+        'room_1',
+        gameState.storySeed,
+        0,
+        1,
+        gameState.storyContext,
+        gameState.storyMode
+      );
 
-    setGameState((prev) => ({
-      ...prev,
-      selectedCharacter: character,
-      currentHP: character.startingHP,
-      maxHP: character.startingHP,
-      currentMana: character.startingMana,
-      maxMana: character.startingMana,
-      level: 1,
-      experience: 0,
-      experienceToNextLevel: 100,
-      isInGame: true,
-      rooms,
-      playerPosition: spawnPosition,
-      battleState: null,
-      inventory: [],
-      storyConsequences: [],
-    }));
-  }, [gameState.storySeed]);
+      console.log('[App] Room pair generated, room0 has scene:', !!room0.sceneImage);
+      console.log('[App] Room pair generated, room1 has scene:', !!room1.sceneImage);
+
+      const rooms = new Map<string, Room>();
+      rooms.set('room_0', room0);
+      rooms.set('room_1', room1);
+
+      // Set player spawn position from tile map
+      const spawnPosition = room0.tileMap?.spawnPoint || {x: 400, y: 300};
+
+      setGameState((prev) => ({
+        ...prev,
+        selectedCharacter: character,
+        currentHP: character.startingHP,
+        maxHP: character.startingHP,
+        currentMana: character.startingMana,
+        maxMana: character.startingMana,
+        level: 1,
+        experience: 0,
+        experienceToNextLevel: 100,
+        isInGame: true,
+        rooms,
+        playerPosition: spawnPosition,
+        battleState: null,
+        inventory: [],
+        storyConsequences: [],
+        previousRoomId: undefined,
+      }));
+
+      console.log('[App] Initial room pair (0 + 1) generated successfully, game starting!');
+    } catch (error) {
+      console.error('[App] Failed to generate initial rooms:', error);
+      setError('Failed to generate initial rooms. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [gameState.storySeed, gameState.storyContext, gameState.storyMode]);
 
   // Handle player movement
   const handlePlayerMove = useCallback((newPosition: Position) => {
@@ -148,56 +182,70 @@ const App: React.FC = () => {
 
   // Handle screen exit (moving to edge)
   const handleScreenExit = useCallback(
-    (direction: 'right' | 'left' | 'up' | 'down') => {
-      setGameState((prev) => {
-        const newRoomCounter = prev.roomCounter + 1;
-        const newRoomId = `room_${newRoomCounter}`;
+    async (direction: 'right' | 'left' | 'up' | 'down') => {
+      const newRoomCounter = gameState.roomCounter + 1;
+      const newRoomId = `room_${newRoomCounter}`;
 
-        // Generate new room
-        const newRoom = generateRoom(
+      // Check if room already exists (pre-generated)
+      let newRoom = gameState.rooms.get(newRoomId);
+
+      if (!newRoom) {
+        // Room not pre-generated, generate it now
+        console.log(`[App] Room ${newRoomId} not pre-generated, generating now...`);
+        const currentRoom = gameState.rooms.get(gameState.currentRoomId);
+
+        newRoom = await generateRoom(
           newRoomId,
-          prev.storySeed,
+          gameState.storySeed,
           newRoomCounter,
+          undefined,
+          gameState.storyContext,
+          gameState.storyMode,
+          currentRoom?.description
         );
+      }
 
+      const tileMap = newRoom.tileMap;
+      let newPosition = tileMap?.spawnPoint || { x: 400, y: 300 };
+
+      if (tileMap) {
+        const { width, height, tileSize, spawnPoint } = tileMap;
+        const mapWidth = width * tileSize;
+        const mapHeight = height * tileSize;
+        const edgeBuffer = Math.max(tileSize * 2, 60);
+
+        const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+        switch (direction) {
+          case 'left':
+            newPosition = {
+              x: clamp(mapWidth - spawnPoint.x, edgeBuffer, mapWidth - edgeBuffer),
+              y: spawnPoint.y,
+            };
+            break;
+          case 'right':
+            newPosition = spawnPoint;
+            break;
+          case 'up':
+            newPosition = {
+              x: spawnPoint.x,
+              y: clamp(mapHeight - spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
+            };
+            break;
+          case 'down':
+            newPosition = {
+              x: spawnPoint.x,
+              y: clamp(spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
+            };
+            break;
+        }
+      }
+
+      // Update state with new room
+      setGameState((prev) => {
         const newRooms = new Map(prev.rooms);
-        newRooms.set(newRoomId, newRoom);
-
-        const tileMap = newRoom.tileMap;
-
-        let newPosition = tileMap?.spawnPoint || { x: 400, y: 300 };
-
-        if (tileMap) {
-          const { width, height, tileSize, spawnPoint } = tileMap;
-          const mapWidth = width * tileSize;
-          const mapHeight = height * tileSize;
-          const edgeBuffer = Math.max(tileSize * 2, 60);
-
-          const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-          switch (direction) {
-            case 'left':
-              newPosition = {
-                x: clamp(mapWidth - spawnPoint.x, edgeBuffer, mapWidth - edgeBuffer),
-                y: spawnPoint.y,
-              };
-              break;
-            case 'right':
-              newPosition = spawnPoint;
-              break;
-            case 'up':
-              newPosition = {
-                x: spawnPoint.x,
-                y: clamp(mapHeight - spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
-              };
-              break;
-            case 'down':
-              newPosition = {
-                x: spawnPoint.x,
-                y: clamp(spawnPoint.y, edgeBuffer, mapHeight - edgeBuffer),
-              };
-              break;
-          }
+        if (newRoom) {
+          newRooms.set(newRoomId, newRoom);
         }
 
         return {
@@ -206,10 +254,62 @@ const App: React.FC = () => {
           playerPosition: newPosition,
           rooms: newRooms,
           roomCounter: newRoomCounter,
+          previousRoomId: prev.currentRoomId,
         };
       });
+
+      // Pre-generate next room pair (N+1 and N+2) in the background with panorama
+      const nextRoomCounter = newRoomCounter + 1;
+      const nextNextRoomCounter = newRoomCounter + 2;
+      const nextRoomId = `room_${nextRoomCounter}`;
+      const nextNextRoomId = `room_${nextNextRoomCounter}`;
+
+      // Check if these rooms are already being generated or exist
+      const roomsAlreadyExist = gameState.rooms.has(nextRoomId) && gameState.rooms.has(nextNextRoomId);
+      const roomsBeingGenerated = generatingRooms.has(nextRoomId) || generatingRooms.has(nextNextRoomId);
+
+      if (!roomsAlreadyExist && !roomsBeingGenerated) {
+        console.log(`[App] Pre-generating room pair ${nextRoomId} + ${nextNextRoomId}...`);
+
+        // Mark both rooms as being generated
+        generatingRooms.add(nextRoomId);
+        generatingRooms.add(nextNextRoomId);
+
+        generateRoomPair(
+          nextRoomId,
+          nextNextRoomId,
+          gameState.storySeed,
+          nextRoomCounter,
+          nextNextRoomCounter,
+          gameState.storyContext,
+          gameState.storyMode,
+          newRoom?.description
+        ).then(({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
+          setGameState((prev) => {
+            const newRooms = new Map(prev.rooms);
+            newRooms.set(nextRoomId, nextRoom);
+            newRooms.set(nextNextRoomId, nextNextRoom);
+            return { ...prev, rooms: newRooms };
+          });
+          console.log(`[App] Room pair ${nextRoomId} + ${nextNextRoomId} pre-generated successfully`);
+
+          // Remove from generating set
+          generatingRooms.delete(nextRoomId);
+          generatingRooms.delete(nextNextRoomId);
+        }).catch((error) => {
+          console.error(`[App] Failed to pre-generate room pair:`, error);
+
+          // Remove from generating set on error too
+          generatingRooms.delete(nextRoomId);
+          generatingRooms.delete(nextNextRoomId);
+        });
+      } else if (roomsAlreadyExist) {
+        console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already exist, skipping pre-generation`);
+      } else {
+        console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already being generated, skipping duplicate call`);
+      }
     },
-    [],
+    [gameState.roomCounter, gameState.rooms, gameState.currentRoomId, gameState.storySeed, gameState.storyContext, gameState.storyMode],
   );
 
   // Handle adding experience and leveling up
@@ -776,11 +876,27 @@ const App: React.FC = () => {
       />
       <AudioManager gameState={gameState} />
       <Window title="Roguelike Adventure">
+        {/* Voice Controls - positioned at top right */}
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          zIndex: 1000,
+        }}>
+          <VoiceControls compact />
+        </div>
+
         <div className="w-full h-full" style={{backgroundColor: '#2d5a4e'}}>
           {showStoryInput ? (
             <StoryInput onSubmit={handleStorySubmit} />
           ) : isGeneratingClasses ? (
             <ClassGenerationLoading />
+          ) : isLoading ? (
+            <div className="flex flex-col items-center justify-center h-full">
+              <div className="text-6xl mb-4 animate-bounce">🎨</div>
+              <div className="text-2xl text-white mb-2">Generating Your Adventure...</div>
+              <div className="text-lg text-gray-300">Creating panoramic scenes with AI</div>
+            </div>
           ) : !gameState.selectedCharacter ? (
             <CharacterSelection
               characters={availableClasses}
@@ -886,6 +1002,38 @@ const App: React.FC = () => {
 
               {/* Game Area */}
               <div className="flex-1 overflow-hidden relative" style={{backgroundColor: '#1a1a1a'}}>
+                {/* Room Description with Voice */}
+                {currentRoom && !showAIDialog && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 50,
+                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                    border: '2px solid #8B5CF6',
+                    borderRadius: '8px',
+                    padding: '12px 20px',
+                    maxWidth: '700px',
+                  }}>
+                    <SpeakableText
+                      text={currentRoom.description}
+                      characterType="narrator"
+                      emotion="mysterious"
+                      buttonSize="small"
+                      style={{
+                        color: '#e5e7eb',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        display: 'block',
+                      }}
+                    >
+                      {currentRoom.description}
+                    </SpeakableText>
+                  </div>
+                )}
+
                 {currentRoom && gameState.selectedCharacter && (
                   <GameCanvas
                     character={gameState.selectedCharacter}

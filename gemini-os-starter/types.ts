@@ -56,7 +56,9 @@ export interface Room {
   objects: GameObject[];
   visited: boolean;
   exitDirection: 'right' | 'left' | 'up' | 'down' | null;
-  tileMap?: TileMap; // Tile-based map for this room
+  tileMap?: TileMap; // Tile-based map for this room (used for pathPoints and collision)
+  sceneImage?: string; // Generated 1000x800 scene image URL (data URL or blob URL)
+  sceneImageLoading?: boolean; // Whether the scene image is currently being generated
 }
 
 export interface GameAnimation {
@@ -123,4 +125,6 @@ export interface GameState {
   battleState: BattleState | null;
   inventory: Item[];
   storyConsequences: StoryConsequence[];
+  nextRoomScenePromise?: Promise<string | null>; // Promise for pre-generating next room's scene
+  previousRoomId?: string; // Track previous room for scene transitions
 }

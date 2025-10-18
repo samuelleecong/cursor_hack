@@ -36,31 +36,32 @@ initializeFalClient();
  */
 const MODEL_ENDPOINTS: Record<MusicModel, string> = {
   'cassetteai': 'cassetteai/music-generator',
-  'stable-audio': 'fal-ai/stable-audio/text-to-audio',
   'minimax': 'fal-ai/minimax-music',
 };
 
 /**
  * Default duration for each model (in seconds)
+ * Optimized for fast generation and seamless looping
  */
 const DEFAULT_DURATIONS: Record<MusicModel, number> = {
-  'cassetteai': 30, // Fast generation, good for loops
-  'stable-audio': 47, // Stable Audio default
-  'minimax': 60, // Longer for story moments
+  'cassetteai': 15, // Short, seamless loops for all music types
+  'minimax': 20, // Concise story moments that loop well
 };
 
 /**
- * Generate music using fal.ai
+ * Generate music using fal.ai with automatic fallback
  *
  * @param prompt - Text description of the music to generate
  * @param model - Which AI model to use
  * @param duration - Length of music in seconds
+ * @param enableFallback - Whether to fallback to cassetteai if primary model fails
  * @returns AudioFile with URL and metadata
  */
 export const generateMusic = async (
   prompt: string,
   model: MusicModel = 'cassetteai',
-  duration?: number
+  duration?: number,
+  enableFallback: boolean = true
 ): Promise<AudioFile> => {
   const actualDuration = duration || DEFAULT_DURATIONS[model];
   const endpoint = MODEL_ENDPOINTS[model];
@@ -105,6 +106,12 @@ export const generateMusic = async (
   } catch (error: any) {
     console.error(`[FalAudio] Generation failed for ${model}:`, error);
 
+    // Automatic fallback to cassetteai if enabled and not already using it
+    if (enableFallback && model !== 'cassetteai') {
+      console.warn(`[FalAudio] Falling back to cassetteai for: "${prompt.slice(0, 60)}..."`);
+      return generateMusic(prompt, 'cassetteai', 15, false); // Disable fallback recursion
+    }
+
     // Provide helpful error messages
     if (error.message?.includes('credentials')) {
       throw new Error('FAL_KEY not configured. Add VITE_FAL_KEY to .env.local');
@@ -118,21 +125,23 @@ export const generateMusic = async (
  * Generate room ambience music (fast, loopable)
  */
 export const generateRoomMusic = async (prompt: string): Promise<AudioFile> => {
-  return generateMusic(prompt, 'cassetteai', 30);
+  return generateMusic(prompt, 'cassetteai', 15);
 };
 
 /**
  * Generate battle music (epic, orchestral)
+ * Uses cassetteai for fast, reliable generation with 18s duration for variety
  */
 export const generateBattleMusic = async (prompt: string): Promise<AudioFile> => {
-  return generateMusic(prompt, 'stable-audio', 47);
+  return generateMusic(prompt, 'cassetteai', 18);
 };
 
 /**
- * Generate story moment music (longer, with potential vocals)
+ * Generate story moment music (shorter, seamlessly looping)
+ * Automatically falls back to cassetteai if minimax fails
  */
 export const generateStoryMusic = async (prompt: string): Promise<AudioFile> => {
-  return generateMusic(prompt, 'minimax', 60);
+  return generateMusic(prompt, 'minimax', 20);
 };
 
 /**

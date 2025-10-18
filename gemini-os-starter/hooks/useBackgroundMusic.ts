@@ -18,11 +18,19 @@ interface UseBackgroundMusicReturn {
   isPlaying: boolean;
   isLoading: boolean;
   currentTrack: AudioFile | null;
+  mainTheme: AudioFile | null;
+  overlayTrack: AudioFile | null;
   error: string | null;
   play: () => void;
   pause: () => void;
   setVolume: (volume: number) => void;
   changeMusic: (context: MusicGenerationContext, audioContext: AudioContext) => Promise<void>;
+  loadMainTheme: (context: MusicGenerationContext) => Promise<void>;
+  playOverlay: (context: MusicGenerationContext, audioContext: AudioContext) => Promise<void>;
+  stopOverlay: () => Promise<void>;
+  duckMainTheme: (targetVolume?: number) => Promise<void>;
+  restoreMainTheme: () => Promise<void>;
+  stopMainTheme: () => Promise<void>;
 }
 
 /**
@@ -42,12 +50,17 @@ export const useBackgroundMusic = (
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentTrack, setCurrentTrack] = useState<AudioFile | null>(null);
+  const [mainTheme, setMainTheme] = useState<AudioFile | null>(null);
+  const [overlayTrack, setOverlayTrack] = useState<AudioFile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Refs for audio elements
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Refs for audio elements - dual layer system
+  const mainThemeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const overlayAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null); // For defeat/victory (legacy)
   const nextAudioRef = useRef<HTMLAudioElement | null>(null);
   const volumeRef = useRef(initialVolume);
+  const mainThemeVolumeRef = useRef(initialVolume);
 
   // Audio context for advanced playback
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -186,14 +199,14 @@ export const useBackgroundMusic = (
               }
             }, { once: true });
 
-            // Longer timeout - WAV files can be large
+            // Short timeout - just try to play, browser will buffer
             setTimeout(() => {
               if (!resolved) {
                 resolved = true;
-                console.warn('[useBackgroundMusic] Load events did not fire, trying to play anyway...');
+                console.warn('[useBackgroundMusic] Load events did not fire quickly, trying to play anyway...');
                 resolve(undefined); // Don't reject, just try to play
               }
-            }, 30000); // 30 seconds
+            }, 3000); // 3 seconds - much faster
           });
 
           console.log(`[useBackgroundMusic] Audio loaded, ready to play`);
@@ -275,6 +288,222 @@ export const useBackgroundMusic = (
     [enabled, isPlaying, crossfadeDuration, crossfade, autoPlay]
   );
 
+  /**
+   * Load and start playing main theme (persistent background music)
+   * Optimized to start playing immediately without waiting for full download
+   */
+  const loadMainTheme = useCallback(
+    async (context: MusicGenerationContext) => {
+      if (!enabled) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        console.log('[useBackgroundMusic] Loading main theme...');
+        const audioFile = await getMusicForContext(context, 'room'); // Use room music as main theme
+        setMainTheme(audioFile);
+
+        console.log(`[useBackgroundMusic] Main theme generated, starting playback: ${audioFile.url}`);
+
+        const newAudio = new Audio();
+        newAudio.crossOrigin = 'anonymous';
+        newAudio.src = audioFile.url;
+        newAudio.loop = true; // Main theme always loops
+        newAudio.preload = 'auto';
+        newAudio.volume = volumeRef.current;
+
+        mainThemeAudioRef.current = newAudio;
+        mainThemeVolumeRef.current = volumeRef.current;
+
+        if (autoPlay) {
+          try {
+            // Try to play immediately - browser will buffer automatically
+            console.log('[useBackgroundMusic] Attempting to play main theme...');
+            await newAudio.play();
+            setIsPlaying(true);
+            console.log('[useBackgroundMusic] ✅ Main theme playing!');
+          } catch (playError: any) {
+            console.error('[useBackgroundMusic] Autoplay blocked, waiting for user interaction:', playError);
+            setError('Click anywhere to enable music (browser autoplay policy)');
+
+            // Attach one-time click handler
+            const handleClick = async () => {
+              try {
+                await newAudio.play();
+                setIsPlaying(true);
+                setError(null);
+                console.log('[useBackgroundMusic] ✅ Main theme started after user interaction');
+              } catch (e) {
+                console.error('[useBackgroundMusic] Failed to play after click:', e);
+              }
+            };
+            document.addEventListener('click', handleClick, { once: true });
+          }
+        }
+      } catch (err: any) {
+        console.error('[useBackgroundMusic] Failed to load main theme:', err);
+        setError(err.message || 'Failed to load main theme');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [enabled, autoPlay]
+  );
+
+  /**
+   * Play overlay music (battle, story moments) on top of main theme
+   * Optimized to start playing immediately without waiting for full download
+   */
+  const playOverlay = useCallback(
+    async (context: MusicGenerationContext, audioContext: AudioContext) => {
+      if (!enabled) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        console.log(`[useBackgroundMusic] Loading overlay: ${audioContext}...`);
+        const audioFile = await getMusicForContext(context, audioContext);
+        setOverlayTrack(audioFile);
+
+        console.log(`[useBackgroundMusic] Overlay generated, starting playback: ${audioFile.url}`);
+
+        const newAudio = new Audio();
+        newAudio.crossOrigin = 'anonymous';
+        newAudio.src = audioFile.url;
+        newAudio.loop = audioContext === 'battle'; // Battle loops, story moments don't
+        newAudio.preload = 'auto';
+        newAudio.volume = 0; // Start at 0 for fade in
+
+        overlayAudioRef.current = newAudio;
+
+        // Try to play immediately and fade in
+        try {
+          console.log('[useBackgroundMusic] Attempting to play overlay...');
+          await newAudio.play();
+
+          // Fade in overlay to full volume
+          const steps = 30;
+          const stepDuration = 1000 / steps; // 1 second fade in
+          for (let step = 0; step < steps; step++) {
+            newAudio.volume = volumeRef.current * (step / steps);
+            await new Promise(resolve => setTimeout(resolve, stepDuration));
+          }
+          newAudio.volume = volumeRef.current;
+
+          console.log(`[useBackgroundMusic] ✅ Overlay playing: ${audioContext}`);
+        } catch (playError: any) {
+          console.error('[useBackgroundMusic] Overlay play failed:', playError);
+          setError('Failed to play overlay music');
+        }
+      } catch (err: any) {
+        console.error('[useBackgroundMusic] Failed to load overlay:', err);
+        setError(err.message || 'Failed to load overlay music');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [enabled]
+  );
+
+  /**
+   * Stop and fade out overlay music
+   */
+  const stopOverlay = useCallback(async () => {
+    if (!overlayAudioRef.current) return;
+
+    console.log('[useBackgroundMusic] Stopping overlay...');
+
+    const audio = overlayAudioRef.current;
+    const steps = 30;
+    const stepDuration = 1000 / steps; // 1 second fade out
+
+    for (let step = steps; step > 0; step--) {
+      audio.volume = volumeRef.current * (step / steps);
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+    }
+
+    audio.pause();
+    overlayAudioRef.current = null;
+    setOverlayTrack(null);
+    console.log('[useBackgroundMusic] ✅ Overlay stopped');
+  }, []);
+
+  /**
+   * Duck main theme volume (reduce for overlay)
+   */
+  const duckMainTheme = useCallback(
+    async (targetVolume: number = 0.35) => {
+      if (!mainThemeAudioRef.current) return;
+
+      console.log(`[useBackgroundMusic] Ducking main theme to ${targetVolume * 100}%...`);
+
+      const audio = mainThemeAudioRef.current;
+      const steps = 30;
+      const stepDuration = 1000 / steps; // 1 second transition
+      const startVolume = audio.volume;
+      const volumeDiff = startVolume - (volumeRef.current * targetVolume);
+
+      for (let step = 0; step < steps; step++) {
+        audio.volume = startVolume - (volumeDiff * (step / steps));
+        await new Promise(resolve => setTimeout(resolve, stepDuration));
+      }
+
+      audio.volume = volumeRef.current * targetVolume;
+      mainThemeVolumeRef.current = volumeRef.current * targetVolume;
+      console.log('[useBackgroundMusic] ✅ Main theme ducked');
+    },
+    []
+  );
+
+  /**
+   * Restore main theme volume to full
+   */
+  const restoreMainTheme = useCallback(async () => {
+    if (!mainThemeAudioRef.current) return;
+
+    console.log('[useBackgroundMusic] Restoring main theme to full volume...');
+
+    const audio = mainThemeAudioRef.current;
+    const steps = 30;
+    const stepDuration = 1000 / steps; // 1 second transition
+    const startVolume = audio.volume;
+    const volumeDiff = volumeRef.current - startVolume;
+
+    for (let step = 0; step < steps; step++) {
+      audio.volume = startVolume + (volumeDiff * (step / steps));
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+    }
+
+    audio.volume = volumeRef.current;
+    mainThemeVolumeRef.current = volumeRef.current;
+    console.log('[useBackgroundMusic] ✅ Main theme restored');
+  }, []);
+
+  /**
+   * Stop main theme (for defeat/victory music replacement)
+   */
+  const stopMainTheme = useCallback(async () => {
+    if (!mainThemeAudioRef.current) return;
+
+    console.log('[useBackgroundMusic] Stopping main theme...');
+
+    const audio = mainThemeAudioRef.current;
+    const steps = 30;
+    const stepDuration = 1000 / steps; // 1 second fade out
+
+    for (let step = steps; step > 0; step--) {
+      audio.volume = volumeRef.current * (step / steps);
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+    }
+
+    audio.pause();
+    mainThemeAudioRef.current = null;
+    setMainTheme(null);
+    console.log('[useBackgroundMusic] ✅ Main theme stopped');
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -286,6 +515,14 @@ export const useBackgroundMusic = (
         nextAudioRef.current.pause();
         nextAudioRef.current = null;
       }
+      if (mainThemeAudioRef.current) {
+        mainThemeAudioRef.current.pause();
+        mainThemeAudioRef.current = null;
+      }
+      if (overlayAudioRef.current) {
+        overlayAudioRef.current.pause();
+        overlayAudioRef.current = null;
+      }
     };
   }, []);
 
@@ -293,10 +530,18 @@ export const useBackgroundMusic = (
     isPlaying,
     isLoading,
     currentTrack,
+    mainTheme,
+    overlayTrack,
     error,
     play,
     pause,
     setVolume,
     changeMusic,
+    loadMainTheme,
+    playOverlay,
+    stopOverlay,
+    duckMainTheme,
+    restoreMainTheme,
+    stopMainTheme,
   };
 };

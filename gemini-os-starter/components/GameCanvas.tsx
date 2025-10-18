@@ -6,7 +6,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {CharacterClass} from '../characterClasses';
 import {Position, GameObject, Room, BattleState, BattleAnimation} from '../types';
-import {isPositionWalkable} from '../services/mapGenerator';
 
 interface GameCanvasProps {
   character: CharacterClass;
@@ -53,6 +52,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Camera offset for following player
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
 
+  // Scene image loading state
+  const [sceneImageLoaded, setSceneImageLoaded] = useState(false);
+  const sceneImageRef = useRef<HTMLImageElement | null>(null);
+
   // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -93,6 +96,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   useEffect(() => {
     isExiting.current = false;
   }, [room]);
+
+  // Load scene image when room changes
+  useEffect(() => {
+    if (!room?.sceneImage) {
+      setSceneImageLoaded(false);
+      sceneImageRef.current = null;
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      sceneImageRef.current = img;
+      setSceneImageLoaded(true);
+      console.log('[GameCanvas] Scene image loaded successfully');
+    };
+    img.onerror = () => {
+      console.error('[GameCanvas] Failed to load scene image');
+      setSceneImageLoaded(false);
+      sceneImageRef.current = null;
+    };
+    img.src = room.sceneImage;
+
+    return () => {
+      sceneImageRef.current = null;
+    };
+  }, [room?.sceneImage]);
 
   // Process animation queue
   useEffect(() => {
@@ -187,53 +216,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
 
         // Collision detection with tile map
-        const playerRadius = PLAYER_SIZE / 2;
-
-        if (moving) {
-            // 1. Check desired position
-            const primaryCheckPoints = [
-              {x: newX, y: newY}, // Center
-              {x: newX - playerRadius, y: newY - playerRadius}, // Top-left
-              {x: newX + playerRadius, y: newY - playerRadius}, // Top-right
-              {x: newX - playerRadius, y: newY + playerRadius}, // Bottom-left
-              {x: newX + playerRadius, y: newY + playerRadius}, // Bottom-right
-            ];
-            const canWalk = primaryCheckPoints.every(point => isPositionWalkable(tileMap, point.x, point.y));
-    
-            if (canWalk) {
-                // Position is fine, do nothing special
-            } else {
-              // 2. Blocked. Try sliding horizontally.
-              const horizontalCheckPoints = [
-                {x: newX - playerRadius, y: playerPosition.y - playerRadius},
-                {x: newX + playerRadius, y: playerPosition.y - playerRadius},
-                {x: newX - playerRadius, y: playerPosition.y + playerRadius},
-                {x: newX + playerRadius, y: playerPosition.y + playerRadius},
-              ];
-              const canWalkHorizontal = horizontalCheckPoints.every(point => isPositionWalkable(tileMap, point.x, playerPosition.y));
-    
-              if (canWalkHorizontal) {
-                newY = playerPosition.y; // Allow horizontal movement, block vertical
-              } else {
-                // 3. Still blocked. Try sliding vertically.
-                const verticalCheckPoints = [
-                    {x: playerPosition.x - playerRadius, y: newY - playerRadius},
-                    {x: playerPosition.x + playerRadius, y: newY - playerRadius},
-                    {x: playerPosition.x - playerRadius, y: newY + playerRadius},
-                    {x: playerPosition.x + playerRadius, y: newY + playerRadius},
-                ];
-                const canWalkVertical = verticalCheckPoints.every(point => isPositionWalkable(tileMap, playerPosition.x, point.y));
-    
-                if (canWalkVertical) {
-                  newX = playerPosition.x; // Allow vertical movement, block horizontal
-                } else {
-                  // 4. Cornered. Block all movement.
-                  newX = playerPosition.x;
-                  newY = playerPosition.y;
-                }
-              }
-            }
-        }
+        // Player can move freely - no terrain collision!
+        // The visual path serves as a guide, not a constraint
 
         // Keep player within bounds
         newX = Math.max(PLAYER_SIZE / 2, Math.min(mapWidth - PLAYER_SIZE / 2, newX));
@@ -257,15 +241,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Check for interactions with space bar (throttled)
         if (keys.has(' ') && currentTime - lastMoveTime.current > 500) {
           lastMoveTime.current = currentTime;
+
+          // Find the closest interactable object within range
+          let closestObject: GameObject | null = null;
+          let closestDistance = Infinity;
+
           objects.forEach((obj) => {
+            if (obj.hasInteracted) return; // Skip already interacted objects
+
             const distance = Math.sqrt(
               Math.pow(playerPosition.x - obj.position.x, 2) +
                 Math.pow(playerPosition.y - obj.position.y, 2),
             );
-            if (distance < 60 && !obj.hasInteracted) {
-              onInteract(obj);
+
+            if (distance < 60 && distance < closestDistance) {
+              closestDistance = distance;
+              closestObject = obj;
             }
           });
+
+          // Interact with only the closest object
+          if (closestObject) {
+            onInteract(closestObject);
+          }
         }
       }
 
@@ -284,20 +282,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.save();
       ctx.translate(-cameraOffset.x, -cameraOffset.y);
 
-      // Draw tile map
-      for (let y = 0; y < tileMap.height; y++) {
-        for (let x = 0; x < tileMap.width; x++) {
-          const tile = tileMap.tiles[y][x];
-          const tileX = x * tileMap.tileSize;
-          const tileY = y * tileMap.tileSize;
+      // Draw scene image if available, otherwise fall back to tiles
+      if (sceneImageLoaded && sceneImageRef.current) {
+        // Draw the generated scene image as background
+        const mapWidth = tileMap.width * tileMap.tileSize;
+        const mapHeight = tileMap.height * tileMap.tileSize;
 
-          // Draw tile background
-          ctx.fillStyle = tile.color;
-          ctx.fillRect(tileX, tileY, tileMap.tileSize, tileMap.tileSize);
+        // Draw scene stretched to fit the map dimensions
+        ctx.drawImage(sceneImageRef.current, 0, 0, mapWidth, mapHeight);
+
+        // Optionally add a subtle overlay for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillRect(0, 0, mapWidth, mapHeight);
+      } else {
+        // Fallback: Draw tile map
+        for (let y = 0; y < tileMap.height; y++) {
+          for (let x = 0; x < tileMap.width; x++) {
+            const tile = tileMap.tiles[y][x];
+            const tileX = x * tileMap.tileSize;
+            const tileY = y * tileMap.tileSize;
+
+            // Draw tile background
+            ctx.fillStyle = tile.color;
+            ctx.fillRect(tileX, tileY, tileMap.tileSize, tileMap.tileSize);
+          }
+        }
+
+        // Show loading indicator if scene is being generated
+        if (room?.sceneImageLoading) {
+          const mapWidth = tileMap.width * tileMap.tileSize;
+          const mapHeight = tileMap.height * tileMap.tileSize;
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(0, 0, mapWidth, mapHeight);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 32px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('Generating scene...', mapWidth / 2, mapHeight / 2);
         }
       }
 
-      // DEBUG MODE: Draw tile grid
+      // DEBUG MODE: Draw tile grid overlay
       if (isDebugMode) {
         for (let y = 0; y < tileMap.height; y++) {
           for (let x = 0; x < tileMap.width; x++) {
@@ -312,8 +336,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
+      // Find the closest interactable object for enhanced visual feedback
+      let closestInteractableObject: GameObject | null = null;
+      let closestInteractableDistance = Infinity;
+
+      objects.forEach((obj) => {
+        if (obj.hasInteracted) return;
+
+        const distance = Math.sqrt(
+          Math.pow(playerPosition.x - obj.position.x, 2) +
+            Math.pow(playerPosition.y - obj.position.y, 2),
+        );
+
+        if (distance < 60 && distance < closestInteractableDistance) {
+          closestInteractableDistance = distance;
+          closestInteractableObject = obj;
+        }
+      });
+
       // Draw objects
       objects.forEach((obj) => {
+        const isClosest = obj === closestInteractableObject;
+
         // Draw object shadow
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.beginPath();
@@ -333,20 +377,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         );
 
         if (distance < 60 && !obj.hasInteracted) {
-          ctx.shadowColor = obj.type === 'enemy' ? '#ef4444' : obj.type === 'item' ? '#fbbf24' : '#3b82f6';
-          ctx.shadowBlur = 20;
+          const glowColor = obj.type === 'enemy' ? '#ef4444' : obj.type === 'item' ? '#fbbf24' : '#3b82f6';
+          ctx.shadowColor = glowColor;
+          // Closest object gets MUCH stronger glow
+          ctx.shadowBlur = isClosest ? 40 : 15;
+
+          // Draw a pulsing circle around the closest object
+          if (isClosest) {
+            ctx.strokeStyle = glowColor;
+            ctx.lineWidth = 3;
+            const pulseRadius = 35 + Math.sin(Date.now() / 150) * 8;
+            ctx.beginPath();
+            ctx.arc(obj.position.x, obj.position.y, pulseRadius, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         }
 
         ctx.fillText(obj.sprite, obj.position.x, obj.position.y + bounce);
         ctx.shadowBlur = 0;
 
-        // Draw interaction indicator if close
-        if (distance < 60 && !obj.hasInteracted) {
+        // Draw interaction indicator - ONLY for the closest object
+        if (isClosest && !obj.hasInteracted) {
           ctx.fillStyle = '#fbbf24';
           ctx.font = 'bold 14px Arial';
           const pulseSize = 14 + Math.sin(Date.now() / 200) * 2;
           ctx.font = `bold ${pulseSize}px Arial`;
           ctx.fillText('⬆ SPACE', obj.position.x, obj.position.y - 40);
+
+          // Draw a line connecting player to closest object
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(playerPosition.x, playerPosition.y);
+          ctx.lineTo(obj.position.x, obj.position.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
       });
 

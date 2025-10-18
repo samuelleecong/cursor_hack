@@ -7,14 +7,77 @@ import {
   MusicGenerationContext,
   AudioContext,
   AudioFile,
-  MusicMood,
-  MusicModel,
 } from '../types/audio';
 import { generateRoomMusic, generateBattleMusic, generateStoryMusic } from './falAudioClient';
 import { audioCache } from './audioCache';
+import { GoogleGenAI } from '@google/genai';
+
+// Initialize Gemini client for music description generation
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
+// Cache for LLM-generated music descriptions
+const musicDescriptionCache = new Map<string, { genre: string; mood: string }>();
 
 /**
- * Extract genre/theme from story context
+ * Use LLM to generate genre and mood from story context
+ */
+const generateMusicDescriptionWithLLM = async (storyContext: string): Promise<{ genre: string; mood: string }> => {
+  // Check cache first
+  if (musicDescriptionCache.has(storyContext)) {
+    return musicDescriptionCache.get(storyContext)!;
+  }
+
+  try {
+    const prompt = `Based on this story description, generate appropriate music genre and mood for background game music.
+
+Story: ${storyContext}
+
+Respond ONLY with a JSON object in this exact format (no other text):
+{
+  "genre": "one specific genre (e.g., 'medieval fantasy', 'sci-fi electronic', 'dark horror ambient', 'western', 'noir jazz', 'pirate adventure', etc.)",
+  "mood": "mood description with 2-3 adjectives (e.g., 'mysterious, ancient', 'dark, ominous', 'hopeful, bright', etc.)"
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-lite',
+      contents: prompt,
+      config: {},
+    });
+
+    const text = response.text || '';
+
+    // Extract JSON from the response (handle markdown code blocks if present)
+    let jsonText = text.trim();
+    if (jsonText.includes('```')) {
+      const match = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (match) {
+        jsonText = match[1];
+      }
+    }
+
+    const parsed = JSON.parse(jsonText);
+    const result = {
+      genre: parsed.genre || 'fantasy adventure',
+      mood: parsed.mood || 'atmospheric, mysterious',
+    };
+
+    // Cache the result
+    musicDescriptionCache.set(storyContext, result);
+
+    console.log('[AudioService] LLM-generated music description:', result);
+    return result;
+  } catch (error) {
+    console.error('[AudioService] Failed to generate music description with LLM:', error);
+    // Fallback to keyword extraction
+    return {
+      genre: extractGenre(storyContext),
+      mood: extractMood(storyContext),
+    };
+  }
+};
+
+/**
+ * Extract genre/theme from story context (fallback method)
  */
 const extractGenre = (storyContext: string | null): string => {
   if (!storyContext) return 'fantasy';
@@ -124,9 +187,21 @@ const getMoralTheme = (consequences: any[] = []): string => {
 /**
  * Build room music prompt based on context
  */
-const buildRoomMusicPrompt = (context: MusicGenerationContext): string => {
-  const genre = extractGenre(context.storyContext);
-  const mood = extractMood(context.storyContext);
+const buildRoomMusicPrompt = async (context: MusicGenerationContext): Promise<string> => {
+  let genre: string;
+  let mood: string;
+
+  // Use LLM to generate genre and mood if story context exists
+  if (context.storyContext && context.storyContext.trim().length > 0) {
+    const llmDescription = await generateMusicDescriptionWithLLM(context.storyContext);
+    genre = llmDescription.genre;
+    mood = llmDescription.mood;
+  } else {
+    // Fallback to keyword extraction or defaults
+    genre = extractGenre(context.storyContext);
+    mood = extractMood(context.storyContext);
+  }
+
   const intensity = getIntensityFromHP(context.playerHP, context.maxHP);
   const moralTheme = getMoralTheme(context.recentConsequences);
 
@@ -150,7 +225,8 @@ const buildRoomMusicPrompt = (context: MusicGenerationContext): string => {
     moralTheme ? `${moralTheme} undertones.` : '',
     `Setting: ${roomDesc.slice(0, 50)}.`,
     modeContext,
-    'Loopable, instrumental, ambient game soundtrack.',
+    'MUST BE SEAMLESSLY LOOPABLE with perfect loop points.',
+    'Short, tight loop. No fade in/out. Instrumental ambient game soundtrack.',
   ].filter(Boolean);
 
   return parts.join(' ');
@@ -159,8 +235,17 @@ const buildRoomMusicPrompt = (context: MusicGenerationContext): string => {
 /**
  * Build battle music prompt based on context
  */
-const buildBattleMusicPrompt = (context: MusicGenerationContext): string => {
-  const genre = extractGenre(context.storyContext);
+const buildBattleMusicPrompt = async (context: MusicGenerationContext): Promise<string> => {
+  let genre: string;
+
+  // Use LLM to generate genre if story context exists
+  if (context.storyContext && context.storyContext.trim().length > 0) {
+    const llmDescription = await generateMusicDescriptionWithLLM(context.storyContext);
+    genre = llmDescription.genre;
+  } else {
+    genre = extractGenre(context.storyContext);
+  }
+
   const enemy = context.battleState?.enemy;
 
   if (!enemy) {
@@ -181,6 +266,7 @@ const buildBattleMusicPrompt = (context: MusicGenerationContext): string => {
     `${characterClass} vs ${enemy.sprite || enemyType}.`,
     'Epic orchestral battle theme with dynamic percussion.',
     'Heroic, energetic, game soundtrack.',
+    'SEAMLESSLY LOOPABLE. Short loop, no fade in/out, perfect loop points.',
   ];
 
   return parts.join(' ');
@@ -189,9 +275,20 @@ const buildBattleMusicPrompt = (context: MusicGenerationContext): string => {
 /**
  * Build story moment music prompt based on context
  */
-const buildStoryMomentPrompt = (context: MusicGenerationContext): string => {
-  const genre = extractGenre(context.storyContext);
-  const mood = extractMood(context.storyContext);
+const buildStoryMomentPrompt = async (context: MusicGenerationContext): Promise<string> => {
+  let genre: string;
+  let mood: string;
+
+  // Use LLM to generate genre and mood if story context exists
+  if (context.storyContext && context.storyContext.trim().length > 0) {
+    const llmDescription = await generateMusicDescriptionWithLLM(context.storyContext);
+    genre = llmDescription.genre;
+    mood = llmDescription.mood;
+  } else {
+    genre = extractGenre(context.storyContext);
+    mood = extractMood(context.storyContext);
+  }
+
   const moralTheme = getMoralTheme(context.recentConsequences);
 
   const parts = [
@@ -200,6 +297,7 @@ const buildStoryMomentPrompt = (context: MusicGenerationContext): string => {
     moralTheme ? `Reflecting ${moralTheme} journey.` : '',
     'Narrative, atmospheric, potentially with subtle vocals.',
     'Game cutscene soundtrack.',
+    'SEAMLESSLY LOOPABLE with perfect loop points. Short loop, no fade in/out.',
   ].filter(Boolean);
 
   return parts.join(' ');
@@ -220,37 +318,53 @@ export const getMusicForContext = async (
 
   switch (audioContext) {
     case 'room':
-      prompt = buildRoomMusicPrompt(context);
+      prompt = await buildRoomMusicPrompt(context);
       generator = generateRoomMusic;
       cacheKey = `${context.currentRoom?.type || 'default'}_${context.roomCounter || 0}_${context.storyMode}`;
       break;
 
     case 'battle':
-      prompt = buildBattleMusicPrompt(context);
+      prompt = await buildBattleMusicPrompt(context);
       generator = generateBattleMusic;
       cacheKey = `${context.battleState?.enemy.type || 'enemy'}_${context.battleState?.enemy.enemyLevel || 1}`;
       break;
 
     case 'story-moment':
-      prompt = buildStoryMomentPrompt(context);
+      prompt = await buildStoryMomentPrompt(context);
       generator = generateStoryMusic;
       cacheKey = `story_${Date.now()}`; // Always unique for story moments
       break;
 
-    case 'victory':
-      prompt = `${extractGenre(context.storyContext)} victory fanfare. Triumphant, celebratory, heroic. Epic orchestral game soundtrack.`;
+    case 'victory': {
+      let genre: string;
+      if (context.storyContext && context.storyContext.trim().length > 0) {
+        const llmDescription = await generateMusicDescriptionWithLLM(context.storyContext);
+        genre = llmDescription.genre;
+      } else {
+        genre = extractGenre(context.storyContext);
+      }
+      prompt = `${genre} victory fanfare. Triumphant, celebratory, heroic. Epic orchestral game soundtrack. SEAMLESSLY LOOPABLE, no fade in/out.`;
       generator = generateBattleMusic;
       cacheKey = 'victory';
       break;
+    }
 
-    case 'defeat':
-      prompt = `${extractGenre(context.storyContext)} defeat music. Somber, melancholic, reflective. Game over soundtrack.`;
+    case 'defeat': {
+      let genre: string;
+      if (context.storyContext && context.storyContext.trim().length > 0) {
+        const llmDescription = await generateMusicDescriptionWithLLM(context.storyContext);
+        genre = llmDescription.genre;
+      } else {
+        genre = extractGenre(context.storyContext);
+      }
+      prompt = `${genre} defeat music. Somber, melancholic, reflective. Game over soundtrack. SEAMLESSLY LOOPABLE, no fade in/out.`;
       generator = generateStoryMusic;
       cacheKey = 'defeat';
       break;
+    }
 
     default:
-      prompt = 'Ambient fantasy music for exploration. Mysterious, atmospheric, loopable.';
+      prompt = 'Ambient fantasy music for exploration. Mysterious, atmospheric. SEAMLESSLY LOOPABLE with perfect loop points, no fade in/out.';
       generator = generateRoomMusic;
       cacheKey = 'default';
   }

@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 /* tslint:disable */
-import {Room, GameObject, Item} from '../types';
+import {Room, GameObject, Item, StoryMode} from '../types';
 import {generateTileMap, BiomeType} from './mapGenerator';
+import {generateSingleRoomScene} from './sceneImageGenerator';
 
 const ENEMY_SPRITES = ['👹', '👻', '🧟', '🐺', '🦇', '🕷️', '🐍'];
 const NPC_SPRITES = ['👨', '👩', '🧙', '🧙‍♀️', '🧝', '🧝‍♀️', '👴', '👵'];
@@ -16,6 +17,58 @@ function randomChoice<T>(arr: T[]): T {
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Check if a position is far enough from all existing objects
+ * to prevent collision/overlap issues
+ */
+function isPositionValidForObject(
+  position: {x: number; y: number},
+  existingObjects: GameObject[],
+  minDistance: number = 100
+): boolean {
+  for (const obj of existingObjects) {
+    const distance = Math.sqrt(
+      Math.pow(position.x - obj.position.x, 2) +
+      Math.pow(position.y - obj.position.y, 2)
+    );
+    if (distance < minDistance) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Find a valid position for an object with collision avoidance
+ */
+function findValidPosition(
+  pathPoints: {x: number; y: number}[],
+  existingObjects: GameObject[],
+  maxAttempts: number = 20,
+  minDistance: number = 100
+): {x: number; y: number} | null {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const pointIndex = Math.floor(Math.random() * pathPoints.length);
+    const point = pathPoints[pointIndex];
+
+    // Add randomness to position (but less than before to stay on path)
+    const offsetX = (Math.random() - 0.5) * 60;
+    const offsetY = (Math.random() - 0.5) * 60;
+
+    const position = {
+      x: point.x + offsetX,
+      y: point.y + offsetY,
+    };
+
+    if (isPositionValidForObject(position, existingObjects, minDistance)) {
+      return position;
+    }
+  }
+
+  // If we couldn't find a valid position, return null
+  return null;
 }
 
 function generateRandomItem(roomNumber: number): Item | undefined {
@@ -60,12 +113,16 @@ function generateRandomItem(roomNumber: number): Item | undefined {
   return randomChoice(itemTypes);
 }
 
-export function generateRoom(
+export async function generateRoom(
   roomId: string,
   storySeed: number,
   roomNumber: number,
   previousRoomType?: string,
-): Room {
+  storyContext?: string | null,
+  storyMode?: StoryMode,
+  previousRoomDescription?: string,
+  generateSceneImage: boolean = true, // Flag to control scene generation
+): Promise<Room> {
   // Use storySeed + roomNumber for consistent randomization
   const seed = storySeed + roomNumber * 1000;
   Math.random = (() => {
@@ -133,22 +190,18 @@ export function generateRoom(
   if (roomType === 'combat' || roomType === 'mixed') {
     const numEnemies = randomInt(2, 4);
     for (let i = 0; i < numEnemies && i < safePathPoints.length; i++) {
-      const pointIndex = Math.floor(i * safePathPoints.length / numEnemies);
-      const point = safePathPoints[pointIndex];
+      // Use collision-aware placement
+      const position = findValidPosition(safePathPoints, objects, 20, 100);
 
-      // Add slight randomness to position
-      const offsetX = (Math.random() - 0.5) * 40;
-      const offsetY = (Math.random() - 0.5) * 40;
+      // Skip if we couldn't find a valid position
+      if (!position) continue;
 
       // Calculate enemy level based on room number
       const enemyLevel = Math.max(1, Math.floor(roomNumber / 2) + 1);
 
       objects.push({
         id: `enemy_${roomId}_${i}`,
-        position: {
-          x: point.x + offsetX,
-          y: point.y + offsetY,
-        },
+        position,
         type: 'enemy',
         sprite: randomChoice(ENEMY_SPRITES),
         interactionText: `A hostile creature (Lv ${enemyLevel}) blocks your path!`,
@@ -162,18 +215,15 @@ export function generateRoom(
   if (roomType === 'peaceful' || roomType === 'mixed') {
     const numNPCs = randomInt(1, 2);
     for (let i = 0; i < numNPCs && i < safePathPoints.length; i++) {
-      const pointIndex = Math.floor(Math.random() * safePathPoints.length);
-      const point = safePathPoints[pointIndex];
+      // Use collision-aware placement
+      const position = findValidPosition(safePathPoints, objects, 20, 100);
 
-      const offsetX = (Math.random() - 0.5) * 40;
-      const offsetY = (Math.random() - 0.5) * 40;
+      // Skip if we couldn't find a valid position
+      if (!position) continue;
 
       objects.push({
         id: `npc_${roomId}_${i}`,
-        position: {
-          x: point.x + offsetX,
-          y: point.y + offsetY,
-        },
+        position,
         type: 'npc',
         sprite: randomChoice(NPC_SPRITES),
         interactionText: 'A traveler rests here',
@@ -185,18 +235,15 @@ export function generateRoom(
   if (roomType === 'treasure' || roomType === 'mixed' || roomType === 'puzzle') {
     const numItems = randomInt(2, 4);
     for (let i = 0; i < numItems && i < safePathPoints.length; i++) {
-      const pointIndex = Math.floor(Math.random() * safePathPoints.length);
-      const point = safePathPoints[pointIndex];
+      // Use collision-aware placement
+      const position = findValidPosition(safePathPoints, objects, 20, 100);
 
-      const offsetX = (Math.random() - 0.5) * 40;
-      const offsetY = (Math.random() - 0.5) * 40;
+      // Skip if we couldn't find a valid position
+      if (!position) continue;
 
       objects.push({
         id: `item_${roomId}_${i}`,
-        position: {
-          x: point.x + offsetX,
-          y: point.y + offsetY,
-        },
+        position,
         type: 'item',
         sprite: randomChoice(ITEM_SPRITES),
         interactionText: 'Something glimmers on the path',
@@ -211,6 +258,28 @@ export function generateRoom(
     return original;
   })();
 
+  // Generate scene image asynchronously with tile map reference
+  // (Only if flag is set - panorama generation will handle it otherwise)
+  let sceneImage: string | undefined;
+  if (generateSceneImage) {
+    try {
+      sceneImage = await generateSingleRoomScene({
+        roomId,
+        roomNumber,
+        biome,
+        description,
+        objects,
+        storyContext,
+        storyMode,
+        previousRoomDescription,
+        tileMap, // Pass tile map for reference image generation
+      });
+    } catch (error) {
+      console.error(`Failed to generate scene for room ${roomId}:`, error);
+      sceneImage = undefined; // Will fallback to tiles
+    }
+  }
+
   return {
     id: roomId,
     description,
@@ -218,6 +287,8 @@ export function generateRoom(
     visited: false,
     exitDirection: 'right',
     tileMap,
+    sceneImage,
+    sceneImageLoading: false,
   };
 }
 
