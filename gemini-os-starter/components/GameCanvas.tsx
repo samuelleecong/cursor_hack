@@ -27,6 +27,68 @@ const VIEWPORT_HEIGHT = 800;
 const PLAYER_SIZE = 35;
 const MOVE_SPEED = 3;
 
+const spriteImageCache = new Map<string, HTMLImageElement>();
+
+function loadSpriteImage(url: string): Promise<HTMLImageElement> {
+  if (spriteImageCache.has(url)) {
+    return Promise.resolve(spriteImageCache.get(url)!);
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      spriteImageCache.set(url, img);
+      resolve(img);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function drawSprite(
+  ctx: CanvasRenderingContext2D,
+  obj: GameObject,
+  x: number,
+  y: number,
+  size: number = 50
+) {
+  if (obj.spriteUrl) {
+    const img = spriteImageCache.get(obj.spriteUrl);
+    if (img) {
+      ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+      return;
+    } else {
+      loadSpriteImage(obj.spriteUrl).catch(() => {});
+    }
+  }
+}
+
+function drawCharacterSprite(
+  ctx: CanvasRenderingContext2D,
+  character: any,
+  x: number,
+  y: number,
+  size: number = 50,
+  addGlow: boolean = true
+) {
+  if (character.spriteUrl) {
+    const img = spriteImageCache.get(character.spriteUrl);
+    if (img) {
+      if (addGlow) {
+        ctx.shadowColor = character.color || '#3b82f6';
+        ctx.shadowBlur = 20;
+      }
+      ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+      if (addGlow) {
+        ctx.shadowBlur = 0;
+      }
+      return;
+    } else {
+      loadSpriteImage(character.spriteUrl).catch(() => {});
+    }
+  }
+}
+
 export const GameCanvas: React.FC<GameCanvasProps> = ({
   character,
   currentHP,
@@ -323,12 +385,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Draw objects
       objects.forEach((obj) => {
-        // Draw object shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.beginPath();
-        ctx.ellipse(obj.position.x, obj.position.y + 20, 18, 6, 0, 0, Math.PI * 2);
-        ctx.fill();
-
         // Draw object sprite with slight bounce animation
         const bounce = isMoving ? Math.sin(Date.now() / 200) * 2 : 0;
         ctx.font = '40px Arial';
@@ -346,7 +402,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.shadowBlur = 20;
         }
 
-        ctx.fillText(obj.sprite, obj.position.x, obj.position.y + bounce);
+        drawSprite(ctx, obj, obj.position.x, obj.position.y + bounce, 75);
         ctx.shadowBlur = 0;
 
         // Draw interaction indicator if close
@@ -359,12 +415,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       });
 
-      // Draw player shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.beginPath();
-      ctx.ellipse(playerPosition.x, playerPosition.y + 25, 20, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
-
       // Draw player with walking animation
       const playerBounce = isMoving ? Math.sin(Date.now() / 100) * 3 : 0;
 
@@ -372,11 +422,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      // Player glow
-      ctx.shadowColor = character.color;
-      ctx.shadowBlur = 15;
-      ctx.fillText(character.icon, playerPosition.x, playerPosition.y + playerBounce);
-      ctx.shadowBlur = 0;
+      drawCharacterSprite(ctx, character, playerPosition.x, playerPosition.y + playerBounce, 75);
 
       // DEBUG MODE: Draw collision points
       if (isDebugMode) {
@@ -407,13 +453,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const playerBattleX = VIEWPORT_WIDTH * 0.25;
         const playerBattleY = VIEWPORT_HEIGHT / 2;
         ctx.font = '80px Arial';
-        ctx.fillText(character.icon, playerBattleX, playerBattleY);
+        drawCharacterSprite(ctx, character, playerBattleX, playerBattleY, 150);
 
         // Enemy position and rendering
         const enemyBattleX = VIEWPORT_WIDTH * 0.75;
         const enemyBattleY = VIEWPORT_HEIGHT / 2;
         ctx.font = '80px Arial';
-        ctx.fillText(battleState.enemy.sprite, enemyBattleX, enemyBattleY);
+        drawSprite(ctx, battleState.enemy, enemyBattleX, enemyBattleY, 150);
 
         // Draw HP bars
         const drawHpBar = (x: number, y: number, currentHp: number, maxHp: number, color: string) => {

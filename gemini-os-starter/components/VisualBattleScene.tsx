@@ -6,6 +6,7 @@
 import React, {useState, useEffect} from 'react';
 import {generateBattleScene, GeneratedImage} from '../services/falService';
 import {getCachedImage, cacheImage} from '../utils/imageCache';
+import {composeInteractionScene} from '../services/sceneComposer';
 
 export interface BattleSceneData {
   scene: string;
@@ -20,6 +21,10 @@ export interface BattleSceneData {
     type: string;
     value?: number;
   }>;
+  characterSprite?: string;
+  enemySprite?: string;
+  biome?: string;
+  interactionContext?: string;
 }
 
 interface VisualBattleSceneProps {
@@ -27,6 +32,7 @@ interface VisualBattleSceneProps {
   onChoice: (choiceId: string, choiceType: string, value?: number) => void;
   isLoading: boolean;
   characterClass?: string;
+  characterSprite?: string;
 }
 
 export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
@@ -34,6 +40,7 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
   onChoice,
   isLoading,
   characterClass,
+  characterSprite,
 }) => {
   const [images, setImages] = useState<{
     background?: string;
@@ -46,8 +53,15 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
   useEffect(() => {
     console.log('[VisualBattleScene] useEffect triggered. Scene data:', sceneData);
 
-    if (!sceneData?.imagePrompts || !sceneData.imagePrompts.background || !sceneData.imagePrompts.enemy) {
-      console.log('[VisualBattleScene] No image prompts found in scene data. Bailing out.');
+    if (!sceneData) {
+      return;
+    }
+
+    const hasImagePrompts = sceneData.imagePrompts?.background && sceneData.imagePrompts?.enemy;
+    const hasSprites = sceneData.characterSprite && sceneData.enemySprite && sceneData.biome;
+
+    if (!hasImagePrompts && !hasSprites) {
+      console.log('[VisualBattleScene] No image prompts or sprites available.');
       return;
     }
 
@@ -56,53 +70,83 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
       setGeneratingImages(true);
 
       try {
-        // Check cache first
-        console.log('[VisualBattleScene] Checking for cached images...');
-        const backgroundPrompt = sceneData.imagePrompts.background;
-        const enemyPrompt = sceneData.imagePrompts.enemy;
+        if (hasSprites) {
+          console.log('[VisualBattleScene] Composing scene with sprites...');
+          console.log('[VisualBattleScene] Scene context:', sceneData.interactionContext);
+          
+          const sceneContext = sceneData.interactionContext || 'meeting';
+          const contextHash = sceneContext.split('').reduce((acc, char) => {
+            return ((acc << 5) - acc) + char.charCodeAt(0);
+          }, 0).toString(36);
+          const cacheKey = `composed_${sceneData.characterSprite}_${sceneData.enemySprite}_${contextHash}`;
+          const cachedComposed = getCachedImage(cacheKey);
+          
+          if (cachedComposed) {
+            console.log('[VisualBattleScene] Found cached composed scene');
+            setImages({
+              background: cachedComposed,
+            });
+            setGeneratingImages(false);
+            return;
+          }
 
-        const cachedBg = getCachedImage(backgroundPrompt);
-        const cachedEnemy = getCachedImage(enemyPrompt);
+          const composedScene = await composeInteractionScene(
+            sceneData.characterSprite!,
+            sceneData.enemySprite!,
+            sceneData.biome!,
+            sceneContext
+          );
 
-        if (cachedBg && cachedEnemy) {
-          console.log('[VisualBattleScene] Found cached images. Using them.', { background: cachedBg, enemy: cachedEnemy });
+          console.log('[VisualBattleScene] Scene composed successfully');
+          cacheImage(cacheKey, composedScene.url);
+
           setImages({
-            background: cachedBg,
-            enemy: cachedEnemy,
+            background: composedScene.url,
           });
-          setGeneratingImages(false);
-          return;
+        } else if (hasImagePrompts) {
+          console.log('[VisualBattleScene] Checking for cached images...');
+          const backgroundPrompt = sceneData.imagePrompts.background;
+          const enemyPrompt = sceneData.imagePrompts.enemy;
+
+          const cachedBg = getCachedImage(backgroundPrompt);
+          const cachedEnemy = getCachedImage(enemyPrompt);
+
+          if (cachedBg && cachedEnemy) {
+            console.log('[VisualBattleScene] Found cached images. Using them.', { background: cachedBg, enemy: cachedEnemy });
+            setImages({
+              background: cachedBg,
+              enemy: cachedEnemy,
+            });
+            setGeneratingImages(false);
+            return;
+          }
+
+          console.log('[VisualBattleScene] No cached images found. Generating...');
+          const result = await generateBattleScene({
+            backgroundPrompt: backgroundPrompt,
+            enemyPrompt: enemyPrompt,
+            characterPrompt: sceneData.imagePrompts.character,
+          });
+
+          console.log('[VisualBattleScene] Image generation result:', result);
+
+          if (!result || !result.background || !result.enemy) {
+              console.error('[VisualBattleScene] Image generation failed to return expected results.');
+              throw new Error('Image generation failed.');
+          }
+
+          cacheImage(backgroundPrompt, result.background.url);
+          cacheImage(enemyPrompt, result.enemy.url);
+          if (result.character && sceneData.imagePrompts.character) {
+            cacheImage(sceneData.imagePrompts.character, result.character.url);
+          }
+
+          setImages({
+            background: result.background.url,
+            enemy: result.enemy.url,
+            character: result.character?.url,
+          });
         }
-
-        console.log('[VisualBattleScene] No cached images found. Generating new images...');
-        // Generate new images
-        const result = await generateBattleScene({
-          backgroundPrompt: backgroundPrompt,
-          enemyPrompt: enemyPrompt,
-          characterPrompt: sceneData.imagePrompts.character,
-        });
-
-        console.log('[VisualBattleScene] Image generation result:', result);
-
-        if (!result || !result.background || !result.enemy) {
-            console.error('[VisualBattleScene] Image generation failed to return expected results.');
-            throw new Error('Image generation failed.');
-        }
-
-        // Cache the generated images
-        console.log('[VisualBattleScene] Caching new images.');
-        cacheImage(backgroundPrompt, result.background.url);
-        cacheImage(enemyPrompt, result.enemy.url);
-        if (result.character && sceneData.imagePrompts.character) {
-          cacheImage(sceneData.imagePrompts.character, result.character.url);
-        }
-
-        console.log('[VisualBattleScene] Setting images in state.');
-        setImages({
-          background: result.background.url,
-          enemy: result.enemy.url,
-          character: result.character?.url,
-        });
       } catch (error) {
         console.error('[VisualBattleScene] Failed to generate or load battle scene images:', error);
       } finally {
@@ -158,33 +202,6 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
 
         {/* Dark overlay for readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60"></div>
-
-        {/* Character and Enemy Sprites */}
-        <div className="relative z-10 w-full h-full flex items-center justify-between px-16">
-          {/* Player Character (bottom-left) */}
-          {characterClass && (
-            <div className="flex flex-col items-center mb-16">
-              <div className="bg-black/50 backdrop-blur-sm px-4 py-2 rounded-lg mb-4">
-                <p className="text-green-400 font-bold text-lg">{characterClass}</p>
-              </div>
-              <div className="w-48 h-48 bg-black/30 backdrop-blur-sm rounded-lg border-4 border-green-500 flex items-center justify-center">
-                <span className="text-8xl">{getCharacterEmoji(characterClass)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Enemy Sprite (top-right) */}
-          {images.enemy && (
-            <div className="flex flex-col items-center mt-16">
-              <img
-                src={images.enemy}
-                alt="Enemy"
-                className="w-64 h-64 object-contain drop-shadow-2xl"
-                style={{imageRendering: 'pixelated', filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.8))'}}
-              />
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Story Text & Choices - Bottom Panel */}
@@ -200,7 +217,7 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
 
         {/* Action Choices */}
         <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex flex-wrap justify-center gap-4">
             {sceneData.choices.map((choice) => {
               const getButtonStyle = () => {
                 switch (choice.type) {
@@ -215,7 +232,7 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
                 <button
                   key={choice.id}
                   onClick={() => onChoice(choice.id, choice.type, choice.value)}
-                  className={`${getButtonStyle()} text-white font-bold px-6 py-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 hover:-translate-y-1 shadow-lg active:scale-95`}
+                  className={`${getButtonStyle()} text-white font-bold px-6 py-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 hover:-translate-y-1 shadow-lg active:scale-95 min-w-[160px]`}
                   disabled={generatingImages}
                 >
                   <span className="block text-center">{choice.text}</span>

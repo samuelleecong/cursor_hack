@@ -20,6 +20,8 @@ import { generateCharacterClasses } from './services/classGenerator';
 import { streamAppContent, generateBiomeProgression } from './services/geminiService';
 import { generateRoom } from './services/roomGenerator';
 import { eventLogger } from './services/eventLogger';
+import { enhanceRoomWithSprites } from './services/roomSpriteEnhancer';
+import { roomCache } from './services/roomCache';
 import {
   BattleAnimation,
   BattleState,
@@ -85,6 +87,7 @@ const App: React.FC = () => {
     battleState: null,
     inventory: [],
     storyConsequences: [],
+    isGeneratingRoom: false,
   });
 
   const [sceneData, setSceneData] = useState<BattleSceneData | null>(null);
@@ -131,16 +134,27 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Handle character selection
   const handleCharacterSelect = useCallback(async (character: CharacterClass) => {
+    setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
+
+    roomCache.initialize(gameState.storySeed);
+
     const biomeKey = gameState.biomeProgression[0] || 'forest';
-    const initialRoom = await generateRoom(
-      'room_0',
-      gameState.storySeed,
-      0,
-      biomeKey,
-      gameState.storyContext
-    );
+    let initialRoom = roomCache.getRoom('room_0');
+
+    if (!initialRoom) {
+      initialRoom = await generateRoom(
+        'room_0',
+        gameState.storySeed,
+        0,
+        biomeKey,
+        gameState.storyContext
+      );
+    }
+    
+    initialRoom = await enhanceRoomWithSprites(initialRoom, biomeKey, gameState.storyContext);
+    roomCache.saveRoom(initialRoom);
+
     const rooms = new Map<string, Room>();
     rooms.set('room_0', initialRoom);
 
@@ -172,6 +186,7 @@ const App: React.FC = () => {
       battleState: null,
       inventory: [],
       storyConsequences: [],
+      isGeneratingRoom: false,
     }));
   }, [gameState.storySeed, gameState.biomeProgression, gameState.storyContext]);
 
@@ -180,23 +195,29 @@ const App: React.FC = () => {
     setGameState((prev) => ({...prev, playerPosition: newPosition}));
   }, []);
 
-  // Handle screen exit (moving to edge)
   const handleScreenExit = useCallback(
     async (direction: 'right' | 'left' | 'up' | 'down') => {
+      setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
+
       const newRoomCounter = gameState.roomCounter + 1;
       const newRoomId = `room_${newRoomCounter}`;
 
-      // Get biome for this room from progression
       const biomeKey = gameState.biomeProgression[newRoomCounter] || 'forest';
 
-      // Generate new room with dynamic biome
-      const newRoom = await generateRoom(
-        newRoomId,
-        gameState.storySeed,
-        newRoomCounter,
-        biomeKey,
-        gameState.storyContext
-      );
+      let newRoom = roomCache.getRoom(newRoomId);
+
+      if (!newRoom) {
+        newRoom = await generateRoom(
+          newRoomId,
+          gameState.storySeed,
+          newRoomCounter,
+          biomeKey,
+          gameState.storyContext
+        );
+      }
+      
+      newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext);
+      roomCache.saveRoom(newRoom);
 
       const newRooms = new Map(gameState.rooms);
       newRooms.set(newRoomId, newRoom);
@@ -252,9 +273,10 @@ const App: React.FC = () => {
         playerPosition: newPosition,
         rooms: newRooms,
         roomCounter: newRoomCounter,
+        isGeneratingRoom: false,
       }));
     },
-    [gameState.roomCounter, gameState.biomeProgression, gameState.storySeed, gameState.storyContext, gameState.rooms],
+    [gameState.roomCounter, gameState.biomeProgression, gameState.storySeed, gameState.storyContext, gameState.rooms, gameState.level, gameState.currentHP],
   );
 
   // Handle adding experience and leveling up
@@ -305,7 +327,7 @@ const App: React.FC = () => {
   }, []);
 
   const internalHandleLlmRequest = useCallback(
-    async (historyForLlm: InteractionData[], maxHistoryLength: number, updatedHP?: number) => {
+    async (historyForLlm: InteractionData[], maxHistoryLength: number, updatedHP?: number, interactingObject?: GameObject) => {
       if (historyForLlm.length === 0) {
         setError('No interaction data to process.');
         return;
@@ -321,12 +343,13 @@ const App: React.FC = () => {
           historyForLlm,
           maxHistoryLength,
           gameState.selectedCharacter?.name,
-          updatedHP ?? gameState.currentHP, // Use updatedHP if provided
+          updatedHP ?? gameState.currentHP,
           gameState.storySeed,
           gameState.level,
           gameState.storyConsequences,
           gameState.storyContext,
           gameState.storyMode,
+          interactingObject?.visualIdentity
         );
         for await (const chunk of stream) {
           accumulatedContent += chunk;
@@ -342,9 +365,42 @@ const App: React.FC = () => {
 
           const parsedScene: BattleSceneData = JSON.parse(jsonText);
 
-          // Validate that required fields exist
-          if (!parsedScene.scene || !parsedScene.imagePrompts || !parsedScene.choices) {
+          if (!parsedScene.scene || !parsedScene.choices) {
             throw new Error('Missing required fields in AI response');
+          }
+
+          const biomeKey = gameState.biomeProgression[gameState.roomCounter] || 'forest';
+          parsedScene.characterSprite = gameState.selectedCharacter?.spriteUrl;
+          parsedScene.enemySprite = interactingObject?.spriteUrl;
+          parsedScene.biome = biomeKey;
+          parsedScene.interactionContext = parsedScene.scene;
+
+          if (interactingObject && !interactingObject.visualIdentity && parsedScene.imagePrompts) {
+            const updatedObject = {
+              ...interactingObject,
+              visualIdentity: {
+                imagePrompts: {
+                  background: parsedScene.imagePrompts.background,
+                  character: parsedScene.imagePrompts.enemy || parsedScene.imagePrompts.character || ''
+                },
+                appearance: `${interactingObject.interactionText}`
+              }
+            };
+
+            setGameState((prev) => {
+              const room = prev.rooms.get(prev.currentRoomId);
+              if (!room) return prev;
+
+              const updatedObjects = room.objects.map((obj) =>
+                obj.id === interactingObject.id ? updatedObject : obj
+              );
+
+              const updatedRoom = {...room, objects: updatedObjects};
+              const newRooms = new Map(prev.rooms);
+              newRooms.set(prev.currentRoomId, updatedRoom);
+
+              return {...prev, rooms: newRooms};
+            });
           }
 
           setSceneData(parsedScene);
@@ -404,9 +460,22 @@ const App: React.FC = () => {
           const room = prev.rooms.get(prev.currentRoomId);
           if (!room) return prev;
 
-          const updatedObjects = room.objects.map((obj) =>
-            obj.id === object.id ? {...obj, hasInteracted: true} : obj,
-          );
+          const updatedObjects = room.objects.map((obj) => {
+            if (obj.id === object.id) {
+              const interactionCount = (obj.interactionHistory?.count || 0) + 1;
+              return {
+                ...obj,
+                hasInteracted: true,
+                interactionHistory: {
+                  count: interactionCount,
+                  lastInteraction: Date.now(),
+                  previousChoices: obj.interactionHistory?.previousChoices || [],
+                  conversationSummary: obj.interactionHistory?.conversationSummary
+                }
+              };
+            }
+            return obj;
+          });
 
           const updatedRoom = {...room, objects: updatedObjects};
           const newRooms = new Map(prev.rooms);
@@ -429,14 +498,15 @@ const App: React.FC = () => {
           ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
         ];
         setInteractionHistory(newHistory);
-        setSceneData(null);
         setError(null);
         setShowAIDialog(true);
+        setIsLoading(true);
+        setSceneData(null);
 
-        internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
+        internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
       }
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, gameState.currentRoomId, gameState.level, gameState.currentHP],
   );
 
   const handleCombatChoice = useCallback(
@@ -592,13 +662,37 @@ const App: React.FC = () => {
         ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
       ];
       setInteractionHistory(newHistory);
+
+      setGameState((prev) => {
+        const room = prev.rooms.get(prev.currentRoomId);
+        if (!room || !currentInteractingObject) return prev;
+
+        const updatedObjects = room.objects.map((obj) => {
+          if (obj.id === currentInteractingObject.id && obj.interactionHistory) {
+            return {
+              ...obj,
+              interactionHistory: {
+                ...obj.interactionHistory,
+                previousChoices: [...obj.interactionHistory.previousChoices, choiceText].slice(-5),
+              }
+            };
+          }
+          return obj;
+        });
+
+        const updatedRoom = {...room, objects: updatedObjects};
+        const newRooms = new Map(prev.rooms);
+        newRooms.set(prev.currentRoomId, updatedRoom);
+
+        return {...prev, rooms: newRooms};
+      });
+
       setSceneData(null);
       setError(null);
 
-      // Call LLM with the updated HP value
-      internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP);
+      internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP, currentInteractingObject);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter, currentInteractingObject, gameState.currentRoomId],
   );
 
   const handleBattleAction = useCallback((action: string) => {
@@ -853,10 +947,10 @@ const App: React.FC = () => {
     setCurrentInteractingObject(null);
   }, []);
 
-  // Restart game
   const handleRestart = useCallback(() => {
     const newSeed = Math.floor(Math.random() * 10000);
     eventLogger.reset();
+    roomCache.reset();
     setGameState({
       selectedCharacter: null,
       currentHP: 0,
@@ -880,6 +974,7 @@ const App: React.FC = () => {
       battleState: null,
       inventory: [],
       storyConsequences: [],
+      isGeneratingRoom: false,
     });
     setSceneData(null);
     setError(null);
@@ -1011,7 +1106,14 @@ const App: React.FC = () => {
 
               {/* Game Area */}
               <div className="flex-1 overflow-hidden relative" style={{backgroundColor: '#1a1a1a'}}>
-                {currentRoom && gameState.selectedCharacter && (
+                {gameState.isGeneratingRoom ? (
+                  <div className="flex items-center justify-center h-full" style={{fontFamily: 'monospace', color: '#f4e8d0'}}>
+                    <div className="text-center">
+                      <div className="text-4xl mb-4">⚙️</div>
+                      <div className="text-xl">Generating sprites...</div>
+                    </div>
+                  </div>
+                ) : currentRoom && gameState.selectedCharacter ? (
                   <GameCanvas
                     character={gameState.selectedCharacter}
                     currentHP={gameState.currentHP}
@@ -1025,7 +1127,7 @@ const App: React.FC = () => {
                     room={currentRoom}
                     battleState={gameState.battleState}
                   />
-                )}
+                ) : null}
 
                 <BattleUI
                   battleState={gameState.battleState}
@@ -1094,6 +1196,7 @@ const App: React.FC = () => {
                         onChoice={handleCombatChoice}
                         isLoading={isLoading}
                         characterClass={gameState.selectedCharacter?.name}
+                        characterSprite={gameState.selectedCharacter?.spriteUrl}
                       />
                     )}
                   </div>

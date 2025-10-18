@@ -21,7 +21,7 @@ const ai = new GoogleGenAI({apiKey: process.env.API_KEY!}); // The "!" asserts A
 
 export async function* streamAppContent(
   interactionHistory: InteractionData[],
-  currentMaxHistoryLength: number, // Receive current max history length
+  currentMaxHistoryLength: number,
   characterClass?: string,
   characterHP?: number,
   storySeed?: number,
@@ -29,6 +29,10 @@ export async function* streamAppContent(
   consequences?: Array<{type: string; description: string}>,
   storyContext?: string | null,
   storyMode?: string,
+  existingVisualIdentity?: {
+    imagePrompts: { background: string; character: string };
+    appearance: string;
+  }
 ): AsyncGenerator<string, void, void> {
   const model = 'gemini-2.5-flash-lite'; // Updated model
 
@@ -58,7 +62,8 @@ export async function* streamAppContent(
     consequences,
     storyContext,
     storyMode,
-    eventContext
+    eventContext,
+    existingVisualIdentity
   ); // Generate system prompt dynamically with game context
 
   const currentInteraction = interactionHistory[0];

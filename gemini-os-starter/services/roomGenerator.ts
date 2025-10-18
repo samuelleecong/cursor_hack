@@ -4,9 +4,9 @@
 */
 /* tslint:disable */
 import {Room, GameObject, Item} from '../types';
-import {generateTileMap, BiomeType} from './mapGenerator';
+import {generateTileMap} from './mapGenerator';
 import {getOrGenerateBiome} from './biomeService';
-import {BiomeDefinition} from '../types/biomes';
+import {generateEnemySprite, generateNPCSprite, generateItemSprite} from './spriteGenerator';
 
 const ENEMY_SPRITES = ['👹', '👻', '🧟', '🐺', '🦇', '🕷️', '🐍'];
 const NPC_SPRITES = ['👨', '👩', '🧙', '🧙‍♀️', '🧝', '🧝‍♀️', '👴', '👵'];
@@ -129,12 +129,11 @@ export async function generateRoom(
       const pointIndex = Math.floor(i * safePathPoints.length / numEnemies);
       const point = safePathPoints[pointIndex];
 
-      // Add slight randomness to position
       const offsetX = (Math.random() - 0.5) * 40;
       const offsetY = (Math.random() - 0.5) * 40;
 
-      // Calculate enemy level based on room number
       const enemyLevel = Math.max(1, Math.floor(roomNumber / 2) + 1);
+      const fallbackSprite = randomChoice(ENEMY_SPRITES);
 
       objects.push({
         id: `enemy_${roomId}_${i}`,
@@ -143,7 +142,7 @@ export async function generateRoom(
           y: point.y + offsetY,
         },
         type: 'enemy',
-        sprite: randomChoice(ENEMY_SPRITES),
+        sprite: fallbackSprite,
         interactionText: `A hostile creature (Lv ${enemyLevel}) blocks your path!`,
         hasInteracted: false,
         enemyLevel: enemyLevel,

@@ -1,10 +1,11 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 /* tslint:disable */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {CharacterClass} from '../characterClasses';
+import { generateCharacterSprite } from '../services/spriteGenerator';
 
 interface CharacterSelectionProps {
   characters: CharacterClass[];
@@ -15,6 +16,51 @@ export const CharacterSelection: React.FC<CharacterSelectionProps> = ({
   characters,
   onSelectCharacter,
 }) => {
+  const [enhancedCharacters, setEnhancedCharacters] = useState<CharacterClass[]>(characters);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const enhanceCharacters = async () => {
+      const enhanced = await Promise.all(
+        characters.map(async (char) => {
+          const sprite = await generateCharacterSprite(
+            char.name,
+            char.description,
+            char.icon,
+            undefined
+          );
+          return {
+            ...char,
+            spriteUrl: sprite.url || undefined
+          };
+        })
+      );
+      setEnhancedCharacters(enhanced);
+      setIsLoading(false);
+    };
+
+    enhanceCharacters();
+  }, [characters]);
+
+  if (isLoading) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center min-h-full p-8"
+        style={{
+          backgroundColor: '#2d5a4e',
+          fontFamily: 'monospace'
+        }}
+      >
+        <div className="text-center">
+          <div className="text-6xl mb-4 animate-pulse">⚔️</div>
+          <p style={{ color: '#f4e8d0', fontSize: '18px' }}>
+            Generating character sprites...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex flex-col items-center justify-center min-h-full p-8"
@@ -79,7 +125,7 @@ export const CharacterSelection: React.FC<CharacterSelectionProps> = ({
 
         {/* Character Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {characters.map((character) => (
+          {enhancedCharacters.map((character) => (
             <div
               key={character.id}
               onClick={() => onSelectCharacter(character)}
@@ -100,14 +146,28 @@ export const CharacterSelection: React.FC<CharacterSelectionProps> = ({
               }}
             >
               <div className="p-6 text-center">
-                {/* Character Icon */}
+                {/* Character Icon or Sprite */}
                 <div
-                  className="text-7xl mb-4"
+                  className="mb-4 flex justify-center items-center"
                   style={{
+                    height: '120px',
                     filter: 'drop-shadow(3px 3px 0px rgba(61,40,23,0.3))'
                   }}
                 >
-                  {character.icon}
+                  {character.spriteUrl ? (
+                    <img 
+                      src={character.spriteUrl} 
+                      alt={character.name}
+                      style={{
+                        width: '100px',
+                        height: '100px',
+                        objectFit: 'contain',
+                        imageRendering: 'pixelated'
+                      }}
+                    />
+                  ) : (
+                    <div className="text-7xl">{character.icon}</div>
+                  )}
                 </div>
 
                 {/* Character Name */}
