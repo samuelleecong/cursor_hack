@@ -26,6 +26,7 @@ export interface BattleSceneData {
   enemySprite?: string;
   biome?: string;
   interactionContext?: string;
+  referenceImageUrl?: string;
 }
 
 interface VisualBattleSceneProps {
@@ -34,6 +35,7 @@ interface VisualBattleSceneProps {
   isLoading: boolean;
   characterClass?: string;
   characterSprite?: string;
+  onSceneGenerated?: (imageUrl: string) => void;
 }
 
 export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
@@ -42,6 +44,7 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
   isLoading,
   characterClass,
   characterSprite,
+  onSceneGenerated,
 }) => {
   const [images, setImages] = useState<{
     background?: string;
@@ -104,7 +107,8 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
             sceneData.characterSprite!,
             sceneData.enemySprite!,
             sceneData.biome!,
-            sceneContext
+            sceneContext,
+            sceneData.referenceImageUrl
           );
 
           console.log('[VisualBattleScene] Scene composed successfully');
@@ -113,6 +117,10 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
           setImages({
             background: composedScene.url,
           });
+
+          if (onSceneGenerated && !sceneData.referenceImageUrl) {
+            onSceneGenerated(composedScene.url);
+          }
         } else if (hasImagePrompts) {
           console.log('[VisualBattleScene] Checking for cached images...');
           const backgroundPrompt = sceneData.imagePrompts.background;

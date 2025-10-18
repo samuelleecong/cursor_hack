@@ -14,20 +14,25 @@ export async function composeInteractionScene(
   playerSpriteUrl: string,
   npcSpriteUrl: string,
   biome: string,
-  sceneDescription: string
+  sceneDescription: string,
+  referenceImageUrl?: string
 ): Promise<ComposedScene> {
   try {
-    console.log('[SceneComposer] Composing interaction scene...');
+    console.log('[SceneComposer] Composing interaction scene...', { hasReference: !!referenceImageUrl });
 
     const prompt = `${sceneDescription}
 
 Create this scene in 16-bit SNES pixel art style. Include the hero character and NPC character in the scene as described. 
-Top-down RPG perspective, cohesive retro pixel art aesthetic with detailed environment, atmospheric lighting, and depth.`;
+Top-down RPG perspective, cohesive retro pixel art aesthetic with detailed environment, atmospheric lighting, and depth.${referenceImageUrl ? ' Maintain the same visual style, color palette, and artistic tone as the reference image.' : ''}`;
+
+    const imageUrls = referenceImageUrl 
+      ? [referenceImageUrl, playerSpriteUrl, npcSpriteUrl]
+      : [playerSpriteUrl, npcSpriteUrl];
 
     const result: any = await fal.subscribe('fal-ai/nano-banana/edit', {
       input: {
         prompt,
-        image_urls: [playerSpriteUrl, npcSpriteUrl],
+        image_urls: imageUrls,
         num_images: 1,
       },
       logs: true,

@@ -108,6 +108,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [interactionHistory, setInteractionHistory] = useState<InteractionData[]>([]);
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
   const [currentMaxHistoryLength] = useState<number>(INITIAL_MAX_HISTORY_LENGTH);
   const [showAIDialog, setShowAIDialog] = useState<boolean>(false);
   const [currentInteractingObject, setCurrentInteractingObject] = useState<GameObject | null>(null);
@@ -617,6 +618,7 @@ const App: React.FC = () => {
           parsedScene.enemySprite = interactingObject?.spriteUrl;
           parsedScene.biome = biomeKey;
           parsedScene.interactionContext = parsedScene.scene;
+          parsedScene.referenceImageUrl = referenceImageUrl || undefined;
 
           if (interactingObject && !interactingObject.visualIdentity && parsedScene.imagePrompts) {
             const updatedObject = {
@@ -729,6 +731,7 @@ const App: React.FC = () => {
       setShowAIDialog(true);
       setIsLoading(true);
       setSceneData(null);
+      setReferenceImageUrl(null);
 
       internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
     },
@@ -742,6 +745,7 @@ const App: React.FC = () => {
         setShowAIDialog(false);
         setSceneData(null);
         setCurrentInteractingObject(null);
+        setReferenceImageUrl(null);
         return;
       }
 
@@ -1437,6 +1441,7 @@ const App: React.FC = () => {
                         isLoading={isLoading}
                         characterClass={gameState.selectedCharacter?.name}
                         characterSprite={gameState.selectedCharacter?.spriteUrl}
+                        onSceneGenerated={(imageUrl) => setReferenceImageUrl(imageUrl)}
                       />
                     )}
                   </div>
