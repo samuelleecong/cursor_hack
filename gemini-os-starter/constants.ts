@@ -18,7 +18,7 @@ export const APP_DEFINITIONS_CONFIG: AppDefinition[] = [
   {id: 'gaming_app', name: 'Games', icon: '🎮', color: '#f3e5f5'},
 ];
 
-export const INITIAL_MAX_HISTORY_LENGTH = 10;
+export const INITIAL_MAX_HISTORY_LENGTH = 10; // Remember last 10 interactions for continuity
 
 export const getSystemPrompt = (
   maxHistory: number,
@@ -26,7 +26,8 @@ export const getSystemPrompt = (
   characterHP?: number,
   storySeed?: number,
   playerLevel?: number,
-  consequences?: Array<{type: string; description: string}>
+  consequences?: Array<{type: string; description: string}>,
+  storyContext?: string | null
 ): string => `
 **ROLE: AI GAME MASTER**
 
@@ -38,6 +39,7 @@ You are the AI Game Master for a roguelike RPG. Your ONLY job is to generate a v
 - Level: ${playerLevel || 1}
 - Story Seed: ${storySeed || 0}
 ${consequences && consequences.length > 0 ? `- Recent Actions: ${consequences.map(c => `${c.type}: ${c.description}`).join(', ')}` : ''}
+${storyContext ? `\n**STORY CONTEXT**\nThe game world and narrative should be inspired by this story:\n${storyContext}\n\nUse this story as inspiration for the setting, atmosphere, characters, and encounters. Maintain thematic consistency with the provided narrative.` : ''}
 
 **RESPONSE FORMAT: JSON ONLY**
 Your entire response must be a single, valid JSON object. Do not use markdown. Do not add comments.

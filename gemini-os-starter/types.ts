@@ -110,6 +110,7 @@ export interface GameState {
   experienceToNextLevel: number;
   isAlive: boolean;
   storySeed: number;
+  storyContext: string | null; // User-provided story for narrative generation
   isInGame: boolean;
   playerPosition: Position;
   currentRoomId: string;

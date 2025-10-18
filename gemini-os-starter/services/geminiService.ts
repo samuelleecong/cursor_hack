@@ -25,6 +25,7 @@ export async function* streamAppContent(
   storySeed?: number,
   playerLevel?: number,
   consequences?: Array<{type: string; description: string}>,
+  storyContext?: string | null
 ): AsyncGenerator<string, void, void> {
   const model = 'gemini-2.5-flash-lite'; // Updated model
 
@@ -49,7 +50,8 @@ export async function* streamAppContent(
     characterHP,
     storySeed,
     playerLevel,
-    consequences
+    consequences,
+    storyContext
   ); // Generate system prompt dynamically with game context
 
   const currentInteraction = interactionHistory[0];
