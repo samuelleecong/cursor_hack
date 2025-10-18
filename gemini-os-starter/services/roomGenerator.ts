@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 /* tslint:disable */
-import {Room, GameObject} from '../types';
+import {Room, GameObject, Item} from '../types';
 import {generateTileMap, BiomeType} from './mapGenerator';
 
 const ENEMY_SPRITES = ['👹', '👻', '🧟', '🐺', '🦇', '🕷️', '🐍'];
@@ -16,6 +16,48 @@ function randomChoice<T>(arr: T[]): T {
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function generateRandomItem(roomNumber: number): Item | undefined {
+  // 50% chance to drop an item
+  if (Math.random() < 0.5) return undefined;
+
+  const itemTypes: Item[] = [
+    {
+      id: `health_potion_${Date.now()}`,
+      name: 'Health Potion',
+      type: 'consumable',
+      sprite: '⚗️',
+      description: 'Restores 30 HP',
+      effect: { type: 'heal', value: 30 },
+    },
+    {
+      id: `mana_potion_${Date.now()}`,
+      name: 'Mana Potion',
+      type: 'consumable',
+      sprite: '🔮',
+      description: 'Restores 25 Mana',
+      effect: { type: 'mana', value: 25 },
+    },
+    {
+      id: `strength_charm_${Date.now()}`,
+      name: 'Strength Charm',
+      type: 'equipment',
+      sprite: '💎',
+      description: 'Increases damage by 5',
+      effect: { type: 'damage_boost', value: 5 },
+    },
+    {
+      id: `iron_ring_${Date.now()}`,
+      name: 'Iron Ring',
+      type: 'equipment',
+      sprite: '💍',
+      description: 'Increases defense by 3',
+      effect: { type: 'defense_boost', value: 3 },
+    },
+  ];
+
+  return randomChoice(itemTypes);
 }
 
 export function generateRoom(
@@ -98,6 +140,9 @@ export function generateRoom(
       const offsetX = (Math.random() - 0.5) * 40;
       const offsetY = (Math.random() - 0.5) * 40;
 
+      // Calculate enemy level based on room number
+      const enemyLevel = Math.max(1, Math.floor(roomNumber / 2) + 1);
+
       objects.push({
         id: `enemy_${roomId}_${i}`,
         position: {
@@ -106,8 +151,10 @@ export function generateRoom(
         },
         type: 'enemy',
         sprite: randomChoice(ENEMY_SPRITES),
-        interactionText: 'A hostile creature blocks your path!',
+        interactionText: `A hostile creature (Lv ${enemyLevel}) blocks your path!`,
         hasInteracted: false,
+        enemyLevel: enemyLevel,
+        itemDrop: generateRandomItem(roomNumber),
       });
     }
   }

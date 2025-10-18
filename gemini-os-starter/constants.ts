@@ -18,9 +18,16 @@ export const APP_DEFINITIONS_CONFIG: AppDefinition[] = [
   {id: 'gaming_app', name: 'Games', icon: '🎮', color: '#f3e5f5'},
 ];
 
-export const INITIAL_MAX_HISTORY_LENGTH = 0;
+export const INITIAL_MAX_HISTORY_LENGTH = 10;
 
-export const getSystemPrompt = (maxHistory: number, characterClass?: string, characterHP?: number, storySeed?: number): string => `
+export const getSystemPrompt = (
+  maxHistory: number,
+  characterClass?: string,
+  characterHP?: number,
+  storySeed?: number,
+  playerLevel?: number,
+  consequences?: Array<{type: string; description: string}>
+): string => `
 **ROLE: AI GAME MASTER**
 
 You are the AI Game Master for a roguelike RPG. Your ONLY job is to generate a valid JSON object based on the player's actions. Do not output any text other than the JSON object.
@@ -28,7 +35,9 @@ You are the AI Game Master for a roguelike RPG. Your ONLY job is to generate a v
 **GAME CONTEXT**
 - Character: ${characterClass || 'Not selected'}
 - HP: ${characterHP || 'N/A'}
+- Level: ${playerLevel || 1}
 - Story Seed: ${storySeed || 0}
+${consequences && consequences.length > 0 ? `- Recent Actions: ${consequences.map(c => `${c.type}: ${c.description}`).join(', ')}` : ''}
 
 **RESPONSE FORMAT: JSON ONLY**
 Your entire response must be a single, valid JSON object. Do not use markdown. Do not add comments.

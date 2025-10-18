@@ -58,7 +58,7 @@ export const CharacterSelection: React.FC<CharacterSelectionProps> = ({
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Special:</span>
                   <span className="text-purple-400 font-semibold">
-                    {character.specialAbility}
+                    {character.specialAbility.name}
                   </span>
                 </div>
               </div>

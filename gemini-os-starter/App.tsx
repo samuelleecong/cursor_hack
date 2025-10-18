@@ -22,14 +22,44 @@ import {
   GameObject,
   Room,
   GameAnimation,
-  BattleState
+  BattleState,
+  Item,
+  BattleAnimation
 } from './types';
+
+// Utility Functions
+const calculateDamage = (
+  baseDamage: number,
+  critChance: number,
+  enemyDefense: number = 0
+): { damage: number; isCrit: boolean } => {
+  const isCrit = Math.random() < critChance;
+  const rawDamage = baseDamage - enemyDefense;
+  const finalDamage = isCrit ? Math.floor(rawDamage * 1.5) : rawDamage;
+  return { damage: Math.max(1, finalDamage), isCrit };
+};
+
+const calculateExperienceGain = (enemyLevel: number, playerLevel: number): number => {
+  const baseXP = 50;
+  const levelDiff = Math.max(0, enemyLevel - playerLevel);
+  return baseXP + (levelDiff * 20);
+};
+
+const calculateLevelUp = (currentLevel: number): number => {
+  return Math.floor(100 * Math.pow(1.5, currentLevel - 1));
+};
 
 const App: React.FC = () => {
   // Game state with pixel art battles
   const [gameState, setGameState] = useState<GameState>({
     selectedCharacter: null,
     currentHP: 0,
+    maxHP: 0,
+    currentMana: 0,
+    maxMana: 0,
+    level: 1,
+    experience: 0,
+    experienceToNextLevel: 100,
     isAlive: true,
     storySeed: Math.floor(Math.random() * 10000),
     isInGame: false,
@@ -39,6 +69,8 @@ const App: React.FC = () => {
     roomCounter: 0,
     currentAnimation: null,
     battleState: null,
+    inventory: [],
+    storyConsequences: [],
   });
 
   const [sceneData, setSceneData] = useState<BattleSceneData | null>(null);
@@ -63,10 +95,18 @@ const App: React.FC = () => {
       ...prev,
       selectedCharacter: character,
       currentHP: character.startingHP,
+      maxHP: character.startingHP,
+      currentMana: character.startingMana,
+      maxMana: character.startingMana,
+      level: 1,
+      experience: 0,
+      experienceToNextLevel: 100,
       isInGame: true,
       rooms,
       playerPosition: spawnPosition,
       battleState: null,
+      inventory: [],
+      storyConsequences: [],
     }));
   }, [gameState.storySeed]);
 
@@ -106,6 +146,52 @@ const App: React.FC = () => {
     },
     [],
   );
+
+  // Handle adding experience and leveling up
+  const handleAddExperience = useCallback((xpGained: number) => {
+    setGameState((prev) => {
+      let newXP = prev.experience + xpGained;
+      let newLevel = prev.level;
+      let newMaxHP = prev.maxHP;
+      let newMaxMana = prev.maxMana;
+      let leveledUp = false;
+
+      // Check for level up
+      while (newXP >= prev.experienceToNextLevel) {
+        newXP -= prev.experienceToNextLevel;
+        newLevel += 1;
+        newMaxHP += 10;
+        newMaxMana += 10;
+        leveledUp = true;
+      }
+
+      if (leveledUp) {
+        // Show level up animation
+        setTimeout(() => {
+          setGameState((state) => ({
+            ...state,
+            currentAnimation: {
+              type: 'levelup',
+              value: newLevel,
+              text: `Level Up! Now Level ${newLevel}`,
+              timestamp: Date.now(),
+            },
+          }));
+        }, 500);
+      }
+
+      return {
+        ...prev,
+        experience: newXP,
+        level: newLevel,
+        maxHP: newMaxHP,
+        maxMana: newMaxMana,
+        currentHP: Math.min(prev.currentHP, newMaxHP),
+        currentMana: Math.min(prev.currentMana, newMaxMana),
+        experienceToNextLevel: calculateLevelUp(newLevel),
+      };
+    });
+  }, []);
 
   const internalHandleLlmRequest = useCallback(
     async (historyForLlm: InteractionData[], maxHistoryLength: number, updatedHP?: number) => {
@@ -240,6 +326,38 @@ const App: React.FC = () => {
         return;
       }
 
+      // Track story consequences based on choice
+      const choiceText = sceneData?.choices.find((c) => c.id === choiceId)?.text || '';
+      let consequenceType: 'merciful' | 'violent' | 'clever' | 'diplomatic' | 'greedy' | null = null;
+
+      // Categorize choices
+      if (choiceType === 'combat' || choiceType === 'damage') {
+        consequenceType = 'violent';
+      } else if (choiceType === 'dialogue') {
+        if (choiceText.toLowerCase().includes('spare') || choiceText.toLowerCase().includes('mercy')) {
+          consequenceType = 'merciful';
+        } else if (choiceText.toLowerCase().includes('negotiate') || choiceText.toLowerCase().includes('talk')) {
+          consequenceType = 'diplomatic';
+        } else {
+          consequenceType = 'clever';
+        }
+      } else if (choiceType === 'loot') {
+        consequenceType = 'greedy';
+      }
+
+      if (consequenceType) {
+        const consequence = {
+          id: `consequence_${Date.now()}`,
+          description: choiceText,
+          type: consequenceType,
+          timestamp: Date.now(),
+        };
+        setGameState((prev) => ({
+          ...prev,
+          storyConsequences: [...prev.storyConsequences, consequence],
+        }));
+      }
+
       let newHP = gameState.currentHP;
 
       // Handle animations and HP changes based on choice type
@@ -316,16 +434,92 @@ const App: React.FC = () => {
   );
 
   const handleBattleAction = useCallback((action: string) => {
-    if (!gameState.battleState || gameState.battleState.turn !== 'player') return;
+    if (!gameState.battleState || gameState.battleState.turn !== 'player' || !gameState.selectedCharacter) return;
 
-    const playerDamage = 25; // Hardcoded for now
+    const character = gameState.selectedCharacter;
+    let playerDamage = 0;
+    let isCrit = false;
+    let manaCost = 0;
+    let actionText = '';
 
-    // Player's turn
+    // Determine action
     if (action === 'attack') {
+      const result = calculateDamage(character.baseDamage, character.critChance);
+      playerDamage = result.damage;
+      isCrit = result.isCrit;
+      actionText = isCrit ? 'Critical Hit!' : 'Attack';
+    } else if (action === 'special') {
+      // Special ability
+      const ability = character.specialAbility;
+      manaCost = ability.manaCost;
+
+      // Check if enough mana
+      if (gameState.currentMana < manaCost) {
+        setGameState(prev => ({
+          ...prev,
+          currentAnimation: {
+            type: 'dialogue',
+            text: 'Not enough mana!',
+            timestamp: Date.now(),
+          },
+        }));
+        return;
+      }
+
+      // Handle healing ability
+      if (ability.healing) {
+        const healAmount = ability.healing;
+        const newHP = Math.min(gameState.maxHP, gameState.currentHP + healAmount);
+
+        setGameState(prev => ({
+          ...prev,
+          currentHP: newHP,
+          currentMana: prev.currentMana - manaCost,
+          currentAnimation: {
+            type: 'heal',
+            value: healAmount,
+            text: `${ability.name}! Healed ${healAmount} HP`,
+            timestamp: Date.now(),
+          },
+          battleState: prev.battleState ? {
+            ...prev.battleState,
+            turn: 'enemy',
+          } : null,
+        }));
+
+        // Enemy's turn after healing
+        setTimeout(() => {
+          handleEnemyTurn();
+        }, 1500);
+        return;
+      }
+
+      // Damage abilities
+      if (ability.baseDamage) {
+        const hasGuaranteedCrit = ability.effects?.includes('guaranteed_crit');
+        if (hasGuaranteedCrit) {
+          playerDamage = Math.floor(ability.baseDamage * 1.5);
+          isCrit = true;
+        } else {
+          const result = calculateDamage(ability.baseDamage, character.critChance);
+          playerDamage = result.damage;
+          isCrit = result.isCrit;
+        }
+        actionText = ability.name;
+      }
+    }
+
+    // Apply damage to enemy
+    if (playerDamage > 0) {
       const newEnemyHP = Math.max(0, gameState.battleState.enemyHP - playerDamage);
       const playerAnimations: BattleAnimation[] = [
         { type: 'slash', target: 'enemy', timestamp: Date.now() },
-        { type: 'damageNumber', target: 'enemy', value: playerDamage, timestamp: Date.now() },
+        {
+          type: 'damageNumber',
+          target: 'enemy',
+          value: isCrit ? `${playerDamage} CRIT!` : playerDamage,
+          timestamp: Date.now()
+        },
       ];
 
       const newBattleState: BattleState = {
@@ -336,38 +530,79 @@ const App: React.FC = () => {
         animationQueue: [...gameState.battleState.animationQueue, ...playerAnimations],
       };
 
-      setGameState(prev => ({ ...prev, battleState: newBattleState }));
+      setGameState(prev => ({
+        ...prev,
+        battleState: newBattleState,
+        currentMana: prev.currentMana - manaCost,
+      }));
 
-      // Enemy's turn (after a delay)
+      // Enemy's turn (after a delay) if still alive
       if (newEnemyHP > 0) {
         setTimeout(() => {
-          const enemyDamage = 15; // Hardcoded for now
-          const newPlayerHP = Math.max(0, gameState.currentHP - enemyDamage);
-          const enemyAnimations: BattleAnimation[] = [
-            { type: 'slash', target: 'player', timestamp: Date.now() },
-            { type: 'damageNumber', target: 'player', value: enemyDamage, timestamp: Date.now() },
-          ];
-
-          setGameState(prev => ({
-            ...prev,
-            currentHP: newPlayerHP,
-            battleState: {
-              ...newBattleState,
-              status: newPlayerHP <= 0 ? 'player_lost' : 'ongoing',
-              turn: 'player',
-              animationQueue: [...newBattleState.animationQueue, ...enemyAnimations],
-            },
-            currentAnimation: {
-              type: 'damage',
-              value: enemyDamage,
-              text: `Took ${enemyDamage} damage!`,
-              timestamp: Date.now(),
-            },
-          }));
+          handleEnemyTurn();
         }, 1000);
+      } else {
+        // Enemy defeated - award XP
+        const enemyLevel = gameState.battleState.enemy.enemyLevel || 1;
+        const xpGained = calculateExperienceGain(enemyLevel, gameState.level);
+
+        setTimeout(() => {
+          handleAddExperience(xpGained);
+
+          // Check for item drop
+          if (gameState.battleState?.enemy.itemDrop) {
+            setGameState(prev => ({
+              ...prev,
+              inventory: [...prev.inventory, gameState.battleState!.enemy.itemDrop!],
+              currentAnimation: {
+                type: 'item_acquired',
+                text: `Found ${gameState.battleState!.enemy.itemDrop!.name}!`,
+                timestamp: Date.now(),
+              },
+            }));
+          }
+        }, 500);
       }
     }
-  }, [gameState.battleState, gameState.currentHP]);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.battleState, gameState.currentHP, gameState.selectedCharacter, gameState.currentMana, gameState.maxHP, gameState.level]);
+
+  // Handle enemy turn
+  const handleEnemyTurn = useCallback(() => {
+    setGameState(prev => {
+      if (!prev.battleState || !prev.selectedCharacter) return prev;
+
+      const enemyLevel = prev.battleState.enemy.enemyLevel || 1;
+      const enemyBaseDamage = 10 + (enemyLevel * 3);
+      const enemyDefenseIgnored = Math.max(0, enemyBaseDamage - prev.selectedCharacter.defense);
+      const enemyDamage = Math.max(5, enemyDefenseIgnored);
+
+      const newPlayerHP = Math.max(0, prev.currentHP - enemyDamage);
+      const enemyAnimations: BattleAnimation[] = [
+        { type: 'slash', target: 'player', timestamp: Date.now() },
+        { type: 'damageNumber', target: 'player', value: enemyDamage, timestamp: Date.now() },
+      ];
+
+      return {
+        ...prev,
+        currentHP: newPlayerHP,
+        isAlive: newPlayerHP > 0,
+        battleState: {
+          ...prev.battleState,
+          status: newPlayerHP <= 0 ? 'player_lost' : 'ongoing',
+          turn: 'player',
+          animationQueue: [...prev.battleState.animationQueue, ...enemyAnimations],
+        },
+        currentAnimation: {
+          type: 'damage',
+          value: enemyDamage,
+          text: `Took ${enemyDamage} damage!`,
+          timestamp: Date.now(),
+        },
+      };
+    });
+  }, []);
 
   // Effect to clear animation queue after processing
   useEffect(() => {
@@ -429,6 +664,12 @@ const App: React.FC = () => {
     setGameState({
       selectedCharacter: null,
       currentHP: 0,
+      maxHP: 0,
+      currentMana: 0,
+      maxMana: 0,
+      level: 1,
+      experience: 0,
+      experienceToNextLevel: 100,
       isAlive: true,
       storySeed: newSeed,
       isInGame: false,
@@ -438,6 +679,8 @@ const App: React.FC = () => {
       roomCounter: 0,
       currentAnimation: null,
       battleState: null,
+      inventory: [],
+      storyConsequences: [],
     });
     setSceneData(null);
     setError(null);
@@ -485,6 +728,13 @@ const App: React.FC = () => {
                 <GameHUD
                   character={gameState.selectedCharacter}
                   currentHP={gameState.currentHP}
+                  maxHP={gameState.maxHP}
+                  currentMana={gameState.currentMana}
+                  maxMana={gameState.maxMana}
+                  level={gameState.level}
+                  experience={gameState.experience}
+                  experienceToNextLevel={gameState.experienceToNextLevel}
+                  roomCounter={gameState.roomCounter}
                 />
               )}
               <div className="flex-1 overflow-hidden bg-gray-900 relative">
@@ -504,7 +754,12 @@ const App: React.FC = () => {
                   />
                 )}
 
-                <BattleUI battleState={gameState.battleState} onPlayerAction={handleBattleAction} />
+                <BattleUI
+                  battleState={gameState.battleState}
+                  onPlayerAction={handleBattleAction}
+                  character={gameState.selectedCharacter}
+                  currentMana={gameState.currentMana}
+                />
 
                 {/* Visual Battle Scene Overlay */}
                 {showAIDialog && (

@@ -27,6 +27,18 @@ export interface Position {
   y: number;
 }
 
+export interface Item {
+  id: string;
+  name: string;
+  type: 'consumable' | 'equipment' | 'key_item';
+  sprite: string;
+  description: string;
+  effect?: {
+    type: 'heal' | 'mana' | 'damage_boost' | 'defense_boost';
+    value: number;
+  };
+}
+
 export interface GameObject {
   id: string;
   position: Position;
@@ -34,6 +46,8 @@ export interface GameObject {
   sprite: string; // emoji or character
   interactionText: string;
   hasInteracted?: boolean;
+  itemDrop?: Item; // Optional item dropped when defeated/collected
+  enemyLevel?: number; // For scaling enemy difficulty
 }
 
 export interface Room {
@@ -46,7 +60,7 @@ export interface Room {
 }
 
 export interface GameAnimation {
-  type: 'damage' | 'heal' | 'combat' | 'loot' | 'dialogue' | null;
+  type: 'damage' | 'heal' | 'combat' | 'loot' | 'dialogue' | 'levelup' | 'item_acquired' | null;
   value?: number;
   text?: string;
   timestamp: number;
@@ -78,9 +92,22 @@ export interface BattleState {
   animationQueue: BattleAnimation[];
 }
 
+export interface StoryConsequence {
+  id: string;
+  description: string;
+  type: 'merciful' | 'violent' | 'clever' | 'diplomatic' | 'greedy';
+  timestamp: number;
+}
+
 export interface GameState {
   selectedCharacter: CharacterClass | null;
   currentHP: number;
+  maxHP: number;
+  currentMana: number;
+  maxMana: number;
+  level: number;
+  experience: number;
+  experienceToNextLevel: number;
   isAlive: boolean;
   storySeed: number;
   isInGame: boolean;
@@ -90,4 +117,6 @@ export interface GameState {
   roomCounter: number;
   currentAnimation: GameAnimation | null;
   battleState: BattleState | null;
+  inventory: Item[];
+  storyConsequences: StoryConsequence[];
 }
