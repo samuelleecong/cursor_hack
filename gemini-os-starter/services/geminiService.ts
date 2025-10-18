@@ -23,6 +23,7 @@ export async function* streamAppContent(
   characterClass?: string,
   characterHP?: number,
   storySeed?: number,
+  storyContext?: string | null,
 ): AsyncGenerator<string, void, void> {
   const model = 'gemini-2.5-flash-lite'; // Updated model
 
@@ -41,7 +42,7 @@ export async function* streamAppContent(
     return;
   }
 
-  const systemPrompt = getSystemPrompt(currentMaxHistoryLength, characterClass, characterHP, storySeed); // Generate system prompt dynamically with game context
+  const systemPrompt = getSystemPrompt(currentMaxHistoryLength, characterClass, characterHP, storySeed, storyContext); // Generate system prompt dynamically with game context
 
   const currentInteraction = interactionHistory[0];
   // pastInteractions already respects currentMaxHistoryLength due to slicing in App.tsx

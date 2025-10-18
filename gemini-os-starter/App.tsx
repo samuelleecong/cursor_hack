@@ -6,6 +6,8 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {AnimationOverlay} from './components/AnimationOverlay';
 import {CharacterSelection} from './components/CharacterSelection';
+import {StoryInput} from './components/StoryInput';
+import {ClassGenerationLoading} from './components/ClassGenerationLoading';
 import {VisualBattleScene, BattleSceneData} from './components/VisualBattleScene';
 import {BattleUI} from './components/BattleUI';
 import {GameCanvas} from './components/GameCanvas';
@@ -15,6 +17,7 @@ import {CHARACTER_CLASSES, CharacterClass} from './characterClasses';
 import {INITIAL_MAX_HISTORY_LENGTH} from './constants';
 import {streamAppContent} from './services/geminiService';
 import {generateRoom} from './services/roomGenerator';
+import {generateCharacterClasses} from './services/classGenerator';
 import {
   GameState,
   InteractionData,
@@ -26,12 +29,18 @@ import {
 } from './types';
 
 const App: React.FC = () => {
+  // Track whether to show story input screen
+  const [showStoryInput, setShowStoryInput] = useState<boolean>(true);
+  const [isGeneratingClasses, setIsGeneratingClasses] = useState<boolean>(false);
+  const [availableClasses, setAvailableClasses] = useState<CharacterClass[]>(CHARACTER_CLASSES);
+
   // Game state with pixel art battles
   const [gameState, setGameState] = useState<GameState>({
     selectedCharacter: null,
     currentHP: 0,
     isAlive: true,
     storySeed: Math.floor(Math.random() * 10000),
+    storyContext: null,
     isInGame: false,
     playerPosition: {x: 400, y: 300},
     currentRoomId: 'room_0',
@@ -48,6 +57,27 @@ const App: React.FC = () => {
   const [currentMaxHistoryLength] = useState<number>(INITIAL_MAX_HISTORY_LENGTH);
   const [showAIDialog, setShowAIDialog] = useState<boolean>(false);
   const [currentInteractingObject, setCurrentInteractingObject] = useState<GameObject | null>(null);
+
+  // Handle story input submission
+  const handleStorySubmit = useCallback(async (story: string | null) => {
+    setGameState((prev) => ({
+      ...prev,
+      storyContext: story,
+    }));
+    setShowStoryInput(false);
+
+    // Generate character classes based on story
+    setIsGeneratingClasses(true);
+    try {
+      const generatedClasses = await generateCharacterClasses(story);
+      setAvailableClasses(generatedClasses);
+    } catch (error) {
+      console.error('Failed to generate classes:', error);
+      setAvailableClasses(CHARACTER_CLASSES); // Fallback to defaults
+    } finally {
+      setIsGeneratingClasses(false);
+    }
+  }, []);
 
   // Handle character selection
   const handleCharacterSelect = useCallback((character: CharacterClass) => {
@@ -126,6 +156,7 @@ const App: React.FC = () => {
           gameState.selectedCharacter?.name,
           updatedHP ?? gameState.currentHP, // Use updatedHP if provided
           gameState.storySeed,
+          gameState.storyContext,
         );
         for await (const chunk of stream) {
           accumulatedContent += chunk;
@@ -159,7 +190,7 @@ const App: React.FC = () => {
         setIsLoading(false);
       }
     },
-    [gameState.selectedCharacter, gameState.currentHP, gameState.storySeed],
+    [gameState.selectedCharacter, gameState.currentHP, gameState.storySeed, gameState.storyContext],
   );
 
   // Handle object interaction
@@ -431,6 +462,7 @@ const App: React.FC = () => {
       currentHP: 0,
       isAlive: true,
       storySeed: newSeed,
+      storyContext: null,
       isInGame: false,
       playerPosition: {x: 400, y: 300},
       currentRoomId: 'room_0',
@@ -444,6 +476,8 @@ const App: React.FC = () => {
     setInteractionHistory([]);
     setShowAIDialog(false);
     setCurrentInteractingObject(null);
+    setAvailableClasses(CHARACTER_CLASSES); // Reset to default classes
+    setShowStoryInput(true);
   }, []);
 
   // Get current room
@@ -457,9 +491,13 @@ const App: React.FC = () => {
       />
       <Window title="Roguelike Adventure">
         <div className="w-full h-full" style={{backgroundColor: '#1a1a2e'}}>
-          {!gameState.selectedCharacter ? (
+          {showStoryInput ? (
+            <StoryInput onSubmit={handleStorySubmit} />
+          ) : isGeneratingClasses ? (
+            <ClassGenerationLoading />
+          ) : !gameState.selectedCharacter ? (
             <CharacterSelection
-              characters={CHARACTER_CLASSES}
+              characters={availableClasses}
               onSelectCharacter={handleCharacterSelect}
             />
           ) : !gameState.isAlive ? (
