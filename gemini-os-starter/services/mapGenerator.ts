@@ -17,6 +17,20 @@ export interface Tile {
   emoji?: string;
 }
 
+export interface PathSegment {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  direction: 'straight' | 'curve-up' | 'curve-down' | 'zigzag';
+  description: string;
+}
+
+export interface PathDescription {
+  segments: PathSegment[];
+  fullDescription: string;
+}
+
 export interface TileMap {
   width: number;
   height: number;
@@ -26,6 +40,7 @@ export interface TileMap {
   biomeDefinition?: BiomeDefinition; // New dynamic biome definition
   spawnPoint: { x: number; y: number };
   pathPoints: { x: number; y: number }[]; // Points along the main path for enemy placement
+  pathDescription?: PathDescription;
 }
 
 const TILE_CONFIGS: Record<TileType, Tile> = {
@@ -132,6 +147,58 @@ function expandPath(
   });
 
   return expandedPath;
+}
+
+function generatePathDescription(
+  pathLine: { x: number; y: number }[],
+  width: number,
+  height: number
+): PathDescription {
+  const segments: PathSegment[] = [];
+  const midY = Math.floor(height / 2);
+  
+  for (let i = 0; i < pathLine.length - 1; i++) {
+    const current = pathLine[i];
+    const next = pathLine[i + 1];
+    
+    const deltaY = next.y - current.y;
+    const deltaX = next.x - current.x;
+    
+    let direction: 'straight' | 'curve-up' | 'curve-down' | 'zigzag' = 'straight';
+    let description = '';
+    
+    const normalizedX = (current.x / width * 100).toFixed(0);
+    const yOffset = current.y - midY;
+    
+    if (Math.abs(deltaY) > 2) {
+      direction = deltaY < 0 ? 'curve-up' : 'curve-down';
+      description = deltaY < 0 
+        ? `curves upward at ${normalizedX}% across the screen`
+        : `curves downward at ${normalizedX}% across the screen`;
+    } else if (Math.abs(deltaY) > 0) {
+      direction = 'zigzag';
+      description = `gently winds ${deltaY < 0 ? 'upward' : 'downward'} at ${normalizedX}%`;
+    } else {
+      description = `continues straight at ${normalizedX}% across`;
+    }
+    
+    if (i % 5 === 0) {
+      segments.push({
+        startX: current.x,
+        startY: current.y,
+        endX: next.x,
+        endY: next.y,
+        direction,
+        description
+      });
+    }
+  }
+  
+  const fullDescription = segments.length > 0
+    ? `A winding path flows from left to right: ${segments.map(s => s.description).join(', then ')}.`
+    : 'A straight path runs horizontally from left to right through the center.';
+  
+  return { segments, fullDescription };
 }
 
 /**
@@ -275,6 +342,8 @@ export function generateTileMap(
     }
   });
 
+  const pathDescription = generatePathDescription(pathLine, width, height);
+
   // Add obstacles around the path (but not blocking it)
   const obstacleChance = biome === 'dungeon' ? 0.10 : 0.20;
   for (let y = 0; y < height; y++) {
@@ -362,6 +431,7 @@ export function generateTileMap(
     biomeDefinition, // Include the full biome definition for reference
     spawnPoint: { x: 2 * tileSize, y: midY * tileSize + tileSize / 2 },
     pathPoints: pathPoints.map(p => ({ x: p.x * tileSize + tileSize / 2, y: p.y * tileSize + tileSize / 2 })),
+    pathDescription,
   };
 }
 

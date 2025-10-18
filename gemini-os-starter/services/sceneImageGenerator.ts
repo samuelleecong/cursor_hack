@@ -106,6 +106,8 @@ If this is a modern, sports, sci-fi, or non-fantasy setting, DO NOT use medieval
 
   // Get biome name for better context
   const biomeName = tileMap?.biomeDefinition?.name || description;
+  
+  const pathDescription = tileMap?.pathDescription?.fullDescription || 'A path flows from left to right through the scene.';
 
   return `You are a visual style consultant for pixel art game scenes.
 
@@ -117,9 +119,13 @@ ${USE_BIOME_FOR_IMAGES ? `ENVIRONMENT STYLE: ${biomeStyle}` : `STYLE: ${biomeSty
 ATMOSPHERE: ${atmosphereHints || 'peaceful, serene environment'}
 ${previousRoomDescription ? `CONTINUITY: Maintains visual consistency with previous area: ${previousRoomDescription}` : ''}
 
+PATH LAYOUT DESCRIPTION:
+${pathDescription}
+
 ${storyContext ? `\n**REMINDER: This is "${biomeName}" from the story context above. The visual style must match that narrative setting, not default to generic fantasy.**\n` : ''}
 
-Generate a STYLE-ONLY prompt for pixel art scene generation. Focus EXCLUSIVELY on:
+Generate a detailed prompt for pixel art scene generation. Include:
+- The path description exactly as specified above, with visual styling appropriate to the setting
 - Color palette (what colors dominate the scene?)
 - Texture and materials (appropriate to the story setting - could be grass, concrete, metal, sand, etc.)
 - Lighting and mood (bright, dark, mysterious, welcoming?)
@@ -128,16 +134,9 @@ Generate a STYLE-ONLY prompt for pixel art scene generation. Focus EXCLUSIVELY o
 - Art style consistency (16-bit RPG, Stardew Valley aesthetic, retro gaming)
 ${storyContext ? '- Setting authenticity (ensure visuals match the narrative context)' : ''}
 
-IMPORTANT: Describe a rich, fully-filled scene with details throughout. The environment should feel complete and immersive.
+IMPORTANT: The walkable path must follow the trajectory described in the PATH LAYOUT DESCRIPTION. Describe it with appropriate visual styling for the setting.
 
-DO NOT mention:
-- Path layout, routes, or directions
-- Spatial positioning or geographic layout
-- Object placement or location
-
-The reference image will handle ALL layout. Your prompt is for ARTISTIC STYLE ONLY.
-
-Output format: Single paragraph, 2-3 sentences, STYLE ONLY.`;
+Output format: Single paragraph, 2-3 sentences including the path description.`;
 }
 
 /**
@@ -154,8 +153,8 @@ export async function generateSingleRoomScene(
     // Build the request for Gemini
     const promptRequest = buildScenePromptRequest(params);
 
-    // Check cache first
-    const cacheKey = `scene_${roomId}_${biome}`;
+    // Check cache first (v2 = path description system)
+    const cacheKey = `scene_v2_${roomId}_${biome}`;
     const cachedUrl = getCachedImage(cacheKey);
 
     if (cachedUrl) {
@@ -196,29 +195,15 @@ export async function generateSingleRoomScene(
       }
     }
 
-    // Now use fal.ai to generate the actual image with EXPLICIT layout preservation
-    console.log(`[SceneGen] Generating image via fal.ai for room ${roomId}${referenceImage ? ' (with INPAINTING MASK reference)' : ''}...`);
-
-    // Build composition-aware prompt following Nano Banana best practices
-    // Use narrative style with photographic language for better semantic understanding
-    const compositionPrompt = `${imagePrompt}
-
-CRITICAL COMPOSITION GUIDANCE (Reference Image Interpretation):
-The reference image is an inpainting mask where WHITE areas represent walkable paths that need stylized terrain, and BLACK areas represent obstacles/environment zones to fill with rich details.
-
-Think of this as a top-down architectural blueprint: the white corridors show where travelers walk (dirt trails, stone paths, grass fields, wooden planks, concrete walkways, or any biome-appropriate surface matching your artistic style). The black zones are where you'll paint the surrounding world—fill every black pixel with immersive environment details like ancient trees, moss-covered boulders, flowing water, architectural ruins, crowd stands, or whatever brings this biome to life.
-
-Compose this as a wide-angle aerial shot with 16-bit pixel art aesthetic. The path must flow seamlessly from the left edge to the right edge, maintaining its exact shape and position as shown in white. Use professional composition techniques: establish depth through layering (foreground obstacles, midground path, background atmosphere), ensure dramatic lighting that highlights the path while casting atmospheric shadows in obstacle zones, and create a color palette that unifies the entire 1000x800 canvas.
-
-Every single pixel matters—there should be no empty voids or raw background showing. The black areas aren't negative space; they're opportunities for environmental storytelling. Fill them generously with textures, objects, and atmospheric details that make this world feel alive and cohesive.`;
+    console.log(`[SceneGen] Generating image via fal.ai for room ${roomId}${referenceImage ? ' (with path-based reference)' : ''}...`);
 
     const generatedImage = await generatePixelArt({
-      prompt: compositionPrompt,
+      prompt: imagePrompt,
       type: 'scene',
       customDimensions: { width: 1000, height: 800 },
-      referenceImage: referenceImage, // Inpainting mask Blob (WHITE=paths, BLACK=obstacles)
-      imageStrength: 0.75, // Optimized for Nano Banana (0.65 was too low, 0.98 risks abstract results)
-      useNanoBanana: true, // Gemini 2.5 Flash Image excels at semantic composition understanding
+      referenceImage: referenceImage,
+      imageStrength: 0.7,
+      useNanoBanana: true,
     });
 
     console.log(`[SceneGen] Scene image generated successfully for room ${roomId}`);
@@ -281,49 +266,38 @@ export async function generateScenePanorama(
     currentImagePrompt = currentImagePrompt.trim();
     nextImagePrompt = nextImagePrompt.trim();
 
-    // Combine prompts for panorama - STYLE ONLY
-    const panoramaStylePrompt = `LEFT SECTION: ${currentImagePrompt} | RIGHT SECTION: ${nextImagePrompt}
-Seamlessly blended artistic styles with unified lighting and color harmony. Natural visual transition between areas.`;
+    const currentPath = currentRoomParams.tileMap?.pathDescription?.fullDescription || '';
+    const nextPath = nextRoomParams.tileMap?.pathDescription?.fullDescription || '';
+    
+    const panoramaPrompt = `LEFT SECTION: ${currentImagePrompt} Path layout: ${currentPath} | RIGHT SECTION: ${nextImagePrompt} Path layout: ${nextPath}
+Seamlessly blended artistic styles with unified lighting and color harmony. Natural visual transition between areas where the paths connect.`;
 
-    console.log(`[SceneGen] Panorama style prompt: ${panoramaStylePrompt.substring(0, 200)}...`);
+    console.log(`[SceneGen] Panorama prompt: ${panoramaPrompt.substring(0, 200)}...`);
 
     // Generate combined tile map reference (2000x800)
     let panoramaReferenceUrl: string | undefined;
     if (currentRoomParams.tileMap && nextRoomParams.tileMap) {
       try {
-        console.log(`[SceneGen] Creating panorama INPAINTING MASK reference (current + next rooms)...`);
+        console.log(`[SceneGen] Creating panorama reference with path guidance...`);
         panoramaReferenceUrl = await combineTileMapsAsPanorama(
           currentRoomParams.tileMap,
           nextRoomParams.tileMap
         );
-        console.log(`[SceneGen] Panorama inpainting mask ready (WHITE paths, BLACK obstacles, feathered edges)`);
+        console.log(`[SceneGen] Panorama reference ready`);
       } catch (error) {
         console.warn(`[SceneGen] Failed to create panorama reference:`, error);
       }
     }
 
-    // Build composition-aware panorama prompt following Nano Banana best practices
-    const panoramaCompositionPrompt = `${panoramaStylePrompt}
-
-CRITICAL PANORAMA COMPOSITION GUIDANCE (Reference Image Interpretation):
-This reference is a 2000x800 pixel inpainting mask displaying two connected rooms. WHITE areas mark walkable paths requiring stylized terrain; BLACK areas mark obstacle zones to fill with environmental richness.
-
-Visualize this as a cinematic wide-angle aerial photograph capturing two distinct but connected spaces: the LEFT HALF (0-1000px) represents the current room, while the RIGHT HALF (1000-2000px) shows the next room. Each white path corridor needs appropriate terrain styling (dirt trails, stone walkways, grass fields, wooden planks, concrete, field markings, or biome-specific surfaces). Every black pixel is canvas for environmental storytelling—populate these zones abundantly with obstacles, vegetation, architectural elements, crowd stands, water features, or atmospheric details that breathe life into each biome.
-
-The sacred compositional rule: paths must flow continuously from the left edge, through the center transition at 1000px, to the right edge. This creates visual momentum and spatial continuity. At the 1000px midpoint, seamlessly blend the artistic styles—imagine a professional photograph where lighting, color temperature, and atmospheric mood transition naturally between the two spaces without jarring discontinuity.
-
-Apply cinematic lighting techniques: use depth layering with foreground obstacles casting shadows, midground paths catching key light, and background atmosphere creating depth. Ensure the color palette harmonizes across the full 2000x800 canvas while allowing each room's unique character to emerge. Fill every pixel purposefully—no voids, no raw background. The black zones aren't empty space; they're opportunities for rich environmental texture that makes this panoramic world feel cohesive and alive.`;
-
-    // Generate 2000x800 panorama with combined tile map reference
-    console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with INPAINTING MASK)' : ''}...`);
+    console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with path reference)' : ''}...`);
 
     const panoramaImage = await generatePixelArt({
-      prompt: panoramaCompositionPrompt,
+      prompt: panoramaPrompt,
       type: 'panorama',
       customDimensions: { width: 2000, height: 800 },
       referenceImage: panoramaReferenceUrl,
-      imageStrength: 0.80, // Optimized for panorama composition (avoids abstract results at >0.90)
-      useNanoBanana: true, // Gemini 2.5 Flash Image excels at multi-image composition and blending
+      imageStrength: 0.7,
+      useNanoBanana: true,
     });
 
     console.log(`[SceneGen] Panorama generated, slicing into sections...`);

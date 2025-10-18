@@ -54,83 +54,23 @@ function getPanoramaDimensions(numRooms: 2 | 3): {
   }
 }
 
-/**
- * Stitch X tile maps into one horizontal panorama reference image
- */
-export async function stitchTileMaps(tileMaps: TileMap[]): Promise<Blob> {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-
-  if (!ctx) {
-    throw new Error('Failed to get canvas context');
-  }
-
-  // Calculate total width
-  const totalWidth = tileMaps.reduce((sum, tm) => sum + tm.width * tm.tileSize, 0);
-  const maxHeight = Math.max(...tileMaps.map(tm => tm.height * tm.tileSize));
-
-  canvas.width = totalWidth;
-  canvas.height = maxHeight;
-
-  let xOffset = 0;
-
-  // Draw each tile map side by side
-  for (const tileMap of tileMaps) {
-    const mapWidth = tileMap.width * tileMap.tileSize;
-    const mapHeight = tileMap.height * tileMap.tileSize;
-
-    // Draw tiles
-    for (let y = 0; y < tileMap.height; y++) {
-      for (let x = 0; x < tileMap.width; x++) {
-        const tile = tileMap.tiles[y][x];
-        const tileX = xOffset + x * tileMap.tileSize;
-        const tileY = y * tileMap.tileSize;
-
-        if (tile.walkable) {
-          ctx.fillStyle = '#FFD700'; // Bright gold for paths
-        } else {
-          ctx.fillStyle = '#222222'; // Dark for obstacles
-        }
-
-        ctx.fillRect(tileX, tileY, tileMap.tileSize, tileMap.tileSize);
-      }
-    }
-
-    // Highlight path
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
-    tileMap.pathPoints.forEach((point) => {
-      ctx.beginPath();
-      ctx.arc(xOffset + point.x, point.y, tileMap.tileSize * 0.8, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    // Draw path outline
-    if (tileMap.pathPoints.length > 1) {
-      ctx.strokeStyle = '#FFD700';
-      ctx.lineWidth = tileMap.tileSize * 1.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(xOffset + tileMap.pathPoints[0].x, tileMap.pathPoints[0].y);
-      for (let i = 1; i < tileMap.pathPoints.length; i++) {
-        ctx.lineTo(xOffset + tileMap.pathPoints[i].x, tileMap.pathPoints[i].y);
-      }
-      ctx.stroke();
-    }
-
-    xOffset += mapWidth;
-  }
-
-  // Convert to Blob
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob);
-      } else {
-        reject(new Error('Failed to convert stitched tile maps to blob'));
-      }
-    }, 'image/png');
+function generateCombinedPathDescription(tileMaps: TileMap[]): string {
+  const roomDescriptions = tileMaps.map((tileMap, index) => {
+    const pathDesc = tileMap.pathDescription?.fullDescription || 'A path runs through the area.';
+    const position = index === 0 ? 'LEFT SECTION' : index === tileMaps.length - 1 ? 'RIGHT SECTION' : 'MIDDLE SECTION';
+    return `${position}: ${pathDesc}`;
   });
+
+  const transitions = [];
+  for (let i = 0; i < tileMaps.length - 1; i++) {
+    const currentEnd = tileMaps[i].pathPoints[tileMaps[i].pathPoints.length - 1];
+    const nextStart = tileMaps[i + 1].pathPoints[0];
+    
+    const transitionY = ((currentEnd.y + nextStart.y) / 2 / (tileMaps[i].height * tileMaps[i].tileSize) * 100).toFixed(0);
+    transitions.push(`smooth transition at ${transitionY}% vertical position between sections ${i + 1} and ${i + 2}`);
+  }
+
+  return `PANORAMA PATH LAYOUT:\n${roomDescriptions.join('\n')}\n\nTRANSITIONS:\n${transitions.join(', ')}.`;
 }
 
 /**
@@ -205,6 +145,7 @@ function buildMultiRoomPrompt(
     biome: string;
     description: string;
   }>,
+  pathDescription: string,
   storyContext?: string | null,
   storyMode?: StoryMode
 ): string {
@@ -223,15 +164,18 @@ ${storySection}
 MULTI-ROOM PANORAMA (${rooms.length} connected rooms):
 ${roomDescriptions}
 
+PATH LAYOUT:
+${pathDescription}
+
 Generate a detailed, vivid prompt for creating a seamless horizontal panorama showing these ${rooms.length} connected locations. The prompt should describe:
 - A continuous landscape flowing from left to right
-- **CRITICAL**: Golden/yellow paths EXACTLY matching the reference tile map layout
-- Smooth transitions between the different areas
+- **CRITICAL**: A clear, golden/yellow walkable path that follows the exact path layout described above
+- Smooth transitions between the different areas as specified in the path layout
 - Consistent lighting and atmosphere across all sections
 - Visual elements that match each room's description
 - Make it feel like a classic top-down 16-bit RPG panorama
 
-**CRITICAL**: The walkable paths must EXACTLY follow the bright gold paths in the reference image. Do not deviate.
+**CRITICAL**: The path must follow the exact trajectory and transitions described in the path layout. Include the path description details in the visual prompt.
 
 Output ONLY the image generation prompt, 2-3 sentences maximum.`;
 }
@@ -272,11 +216,11 @@ export async function generateMultiRoomBatch(
     )
   );
 
-  // Step 2: Stitch tile maps into one reference image
+  // Step 2: Generate combined path description
   const tileMaps = roomBases.map(room => room.tileMap!);
-  const stitchedTileMapBlob = await stitchTileMaps(tileMaps);
+  const pathDescription = generateCombinedPathDescription(tileMaps);
 
-  console.log(`[MultiRoomGen] Stitched ${numRooms} tile maps into reference image`);
+  console.log(`[MultiRoomGen] Generated path description for ${numRooms} rooms`);
 
   // Step 3: Generate panorama prompt using Gemini 2.5 Pro
   const promptRequest = buildMultiRoomPrompt(
@@ -285,6 +229,7 @@ export async function generateMultiRoomBatch(
       biome: room.tileMap!.biome,
       description: room.description,
     })),
+    pathDescription,
     storyContext,
     storyMode
   );
@@ -307,39 +252,22 @@ export async function generateMultiRoomBatch(
   imagePrompt = imagePrompt.trim();
   console.log(`[MultiRoomGen] Prompt: ${imagePrompt.substring(0, 150)}...`);
 
-  // Step 4: Upload reference images to fal.ai
-  const stitchedTileMapUrl = await (async () => {
-    const uploaded = await import('@fal-ai/serverless-client').then(fal =>
-      fal.default.storage.upload(stitchedTileMapBlob)
-    );
-    return uploaded;
-  })();
-
-  console.log(`[MultiRoomGen] Tile map reference uploaded: ${stitchedTileMapUrl}`);
-
-  // Step 5: Prepare image references (dual anchor system)
-  const imageReferences: string[] = [stitchedTileMapUrl];
+  // Step 4: Prepare image references (anchor system)
+  const imageReferences: string[] = [];
 
   if (config.useAnchorImage && previousSceneUrl) {
-    imageReferences.unshift(previousSceneUrl); // Add previous scene as first reference (primary anchor)
+    imageReferences.push(previousSceneUrl);
     console.log(`[MultiRoomGen] Using previous scene as visual anchor: ${previousSceneUrl.substring(0, 50)}...`);
   }
 
-  // Step 6: Generate panorama using Nano Banana with dual references
+  // Step 5: Generate panorama using Nano Banana
   const dimensions = getPanoramaDimensions(numRooms);
 
-  console.log(`[MultiRoomGen] Generating ${dimensions.aspectRatio} panorama (${dimensions.totalWidth}x${dimensions.totalHeight}) with ${imageReferences.length} reference images...`);
+  console.log(`[MultiRoomGen] Generating ${dimensions.aspectRatio} panorama (${dimensions.totalWidth}x${dimensions.totalHeight}) with path description...`);
 
-  // Prepare reference images array (previous scene + tile map for anchoring)
-  const referenceImagesArray: string[] = [];
-
-  if (config.useAnchorImage && previousSceneUrl) {
-    referenceImagesArray.push(previousSceneUrl); // Visual style anchor
-    console.log(`[MultiRoomGen] Reference 1: Previous scene (visual anchor)`);
+  if (imageReferences.length > 0) {
+    console.log(`[MultiRoomGen] Using ${imageReferences.length} reference image(s) for visual continuity`);
   }
-
-  referenceImagesArray.push(stitchedTileMapUrl); // Path layout guide
-  console.log(`[MultiRoomGen] Reference 2: Stitched tile map (path guide)`);
 
   const generatedImage = await generatePixelArt({
     prompt: imagePrompt,
@@ -348,13 +276,13 @@ export async function generateMultiRoomBatch(
       width: dimensions.totalWidth,
       height: dimensions.totalHeight,
     },
-    referenceImages: referenceImagesArray, // Dual anchor: previous scene + tile map
+    referenceImages: imageReferences.length > 0 ? imageReferences : undefined,
     useNanoBanana: true,
   });
 
   console.log(`[MultiRoomGen] Panorama generated successfully`);
 
-  // Step 7: Slice panorama into individual room scenes and scale to viewport
+  // Step 6: Slice panorama into individual room scenes and scale to viewport
   const TARGET_VIEWPORT_WIDTH = 1000;  // Standard canvas viewport width
   const TARGET_VIEWPORT_HEIGHT = 800;  // Standard canvas viewport height
 
@@ -367,7 +295,7 @@ export async function generateMultiRoomBatch(
 
   console.log(`[MultiRoomGen] Sliced panorama into ${numRooms} scenes and scaled to ${TARGET_VIEWPORT_WIDTH}x${TARGET_VIEWPORT_HEIGHT}`);
 
-  // Step 8: Attach scenes to rooms
+  // Step 7: Attach scenes to rooms
   roomBases.forEach((room, idx) => {
     room.sceneImage = slicedScenes[idx];
     room.sceneImageLoading = false;

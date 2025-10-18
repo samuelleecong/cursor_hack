@@ -6,7 +6,7 @@
 import { Room } from '../types';
 
 const ROOM_CACHE_KEY = 'roguelike_room_cache';
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 interface CachedRoomData {
   version: number;
