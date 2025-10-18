@@ -17,6 +17,7 @@ export interface CharacterClass {
   id: string;
   name: string;
   icon: string;
+  spriteUrl?: string;
   color: string;
   description: string;
   startingHP: number;

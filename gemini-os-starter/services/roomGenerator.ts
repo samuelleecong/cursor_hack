@@ -7,7 +7,8 @@ import {Room, GameObject, Item, StoryMode} from '../types';
 import {generateTileMap, BiomeType} from './mapGenerator';
 import {generateSingleRoomScene} from './sceneImageGenerator';
 import {getOrGenerateBiome} from './biomeService';
-import {BiomeDefinition} from '../types/biomes';
+import {generateEnemySprite, generateNPCSprite, generateItemSprite} from './spriteGenerator';
+import {generateNPCInteractionText} from './npcGenerator';
 
 const ENEMY_SPRITES = ['👹', '👻', '🧟', '🐺', '🦇', '🕷️', '🐍'];
 const NPC_SPRITES = ['👨', '👩', '🧙', '🧙‍♀️', '🧝', '🧝‍♀️', '👴', '👵'];
@@ -187,14 +188,14 @@ export async function generateRoom(
       // Skip if we couldn't find a valid position
       if (!position) continue;
 
-      // Calculate enemy level based on room number
       const enemyLevel = Math.max(1, Math.floor(roomNumber / 2) + 1);
+      const fallbackSprite = randomChoice(ENEMY_SPRITES);
 
       objects.push({
         id: `enemy_${roomId}_${i}`,
         position,
         type: 'enemy',
-        sprite: randomChoice(ENEMY_SPRITES),
+        sprite: fallbackSprite,
         interactionText: `A hostile creature (Lv ${enemyLevel}) blocks your path!`,
         hasInteracted: false,
         enemyLevel: enemyLevel,
@@ -212,12 +213,18 @@ export async function generateRoom(
       // Skip if we couldn't find a valid position
       if (!position) continue;
 
+      // Generate story-aware NPC description (we'll use this in roomSpriteEnhancer)
+      // For now, use generic but mark for AI enhancement
+      const interactionText = storyContext
+        ? await generateNPCInteractionText('npc', roomNumber, storyContext, storyMode || 'inspiration')
+        : 'A traveler rests here';
+
       objects.push({
         id: `npc_${roomId}_${i}`,
         position,
         type: 'npc',
         sprite: randomChoice(NPC_SPRITES),
-        interactionText: 'A traveler rests here',
+        interactionText,
         hasInteracted: false,
       });
     }

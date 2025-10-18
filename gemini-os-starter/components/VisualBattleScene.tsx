@@ -6,6 +6,8 @@
 import React, {useState, useEffect} from 'react';
 import {generateBattleScene, GeneratedImage} from '../services/falService';
 import {getCachedImage, cacheImage} from '../utils/imageCache';
+import {composeInteractionScene} from '../services/sceneComposer';
+import {SceneGenerationLoading} from './SceneGenerationLoading';
 
 export interface BattleSceneData {
   scene: string;
@@ -20,6 +22,10 @@ export interface BattleSceneData {
     type: string;
     value?: number;
   }>;
+  characterSprite?: string;
+  enemySprite?: string;
+  biome?: string;
+  interactionContext?: string;
 }
 
 interface VisualBattleSceneProps {
@@ -27,6 +33,7 @@ interface VisualBattleSceneProps {
   onChoice: (choiceId: string, choiceType: string, value?: number) => void;
   isLoading: boolean;
   characterClass?: string;
+  characterSprite?: string;
 }
 
 export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
@@ -34,6 +41,7 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
   onChoice,
   isLoading,
   characterClass,
+  characterSprite,
 }) => {
   const [images, setImages] = useState<{
     background?: string;
@@ -41,13 +49,21 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
     character?: string;
   }>({});
   const [generatingImages, setGeneratingImages] = useState(false);
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
 
   // Generate or load cached images when scene data changes
   useEffect(() => {
     console.log('[VisualBattleScene] useEffect triggered. Scene data:', sceneData);
 
-    if (!sceneData?.imagePrompts || !sceneData.imagePrompts.background || !sceneData.imagePrompts.enemy) {
-      console.log('[VisualBattleScene] No image prompts found in scene data. Bailing out.');
+    if (!sceneData) {
+      return;
+    }
+
+    const hasImagePrompts = sceneData.imagePrompts?.background && sceneData.imagePrompts?.enemy;
+    const hasSprites = sceneData.characterSprite && sceneData.enemySprite && sceneData.biome;
+
+    if (!hasImagePrompts && !hasSprites) {
+      console.log('[VisualBattleScene] No image prompts or sprites available.');
       return;
     }
 
@@ -56,53 +72,83 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
       setGeneratingImages(true);
 
       try {
-        // Check cache first
-        console.log('[VisualBattleScene] Checking for cached images...');
-        const backgroundPrompt = sceneData.imagePrompts.background;
-        const enemyPrompt = sceneData.imagePrompts.enemy;
+        if (hasSprites) {
+          console.log('[VisualBattleScene] Composing scene with sprites...');
+          console.log('[VisualBattleScene] Scene context:', sceneData.interactionContext);
+          
+          const sceneContext = sceneData.interactionContext || 'meeting';
+          const contextHash = sceneContext.split('').reduce((acc, char) => {
+            return ((acc << 5) - acc) + char.charCodeAt(0);
+          }, 0).toString(36);
+          const cacheKey = `composed_${sceneData.characterSprite}_${sceneData.enemySprite}_${contextHash}`;
+          const cachedComposed = getCachedImage(cacheKey);
+          
+          if (cachedComposed) {
+            console.log('[VisualBattleScene] Found cached composed scene');
+            setImages({
+              background: cachedComposed,
+            });
+            setGeneratingImages(false);
+            return;
+          }
 
-        const cachedBg = getCachedImage(backgroundPrompt);
-        const cachedEnemy = getCachedImage(enemyPrompt);
+          const composedScene = await composeInteractionScene(
+            sceneData.characterSprite!,
+            sceneData.enemySprite!,
+            sceneData.biome!,
+            sceneContext
+          );
 
-        if (cachedBg && cachedEnemy) {
-          console.log('[VisualBattleScene] Found cached images. Using them.', { background: cachedBg, enemy: cachedEnemy });
+          console.log('[VisualBattleScene] Scene composed successfully');
+          cacheImage(cacheKey, composedScene.url);
+
           setImages({
-            background: cachedBg,
-            enemy: cachedEnemy,
+            background: composedScene.url,
           });
-          setGeneratingImages(false);
-          return;
+        } else if (hasImagePrompts) {
+          console.log('[VisualBattleScene] Checking for cached images...');
+          const backgroundPrompt = sceneData.imagePrompts.background;
+          const enemyPrompt = sceneData.imagePrompts.enemy;
+
+          const cachedBg = getCachedImage(backgroundPrompt);
+          const cachedEnemy = getCachedImage(enemyPrompt);
+
+          if (cachedBg && cachedEnemy) {
+            console.log('[VisualBattleScene] Found cached images. Using them.', { background: cachedBg, enemy: cachedEnemy });
+            setImages({
+              background: cachedBg,
+              enemy: cachedEnemy,
+            });
+            setGeneratingImages(false);
+            return;
+          }
+
+          console.log('[VisualBattleScene] No cached images found. Generating...');
+          const result = await generateBattleScene({
+            backgroundPrompt: backgroundPrompt,
+            enemyPrompt: enemyPrompt,
+            characterPrompt: sceneData.imagePrompts.character,
+          });
+
+          console.log('[VisualBattleScene] Image generation result:', result);
+
+          if (!result || !result.background || !result.enemy) {
+              console.error('[VisualBattleScene] Image generation failed to return expected results.');
+              throw new Error('Image generation failed.');
+          }
+
+          cacheImage(backgroundPrompt, result.background.url);
+          cacheImage(enemyPrompt, result.enemy.url);
+          if (result.character && sceneData.imagePrompts.character) {
+            cacheImage(sceneData.imagePrompts.character, result.character.url);
+          }
+
+          setImages({
+            background: result.background.url,
+            enemy: result.enemy.url,
+            character: result.character?.url,
+          });
         }
-
-        console.log('[VisualBattleScene] No cached images found. Generating new images...');
-        // Generate new images
-        const result = await generateBattleScene({
-          backgroundPrompt: backgroundPrompt,
-          enemyPrompt: enemyPrompt,
-          characterPrompt: sceneData.imagePrompts.character,
-        });
-
-        console.log('[VisualBattleScene] Image generation result:', result);
-
-        if (!result || !result.background || !result.enemy) {
-            console.error('[VisualBattleScene] Image generation failed to return expected results.');
-            throw new Error('Image generation failed.');
-        }
-
-        // Cache the generated images
-        console.log('[VisualBattleScene] Caching new images.');
-        cacheImage(backgroundPrompt, result.background.url);
-        cacheImage(enemyPrompt, result.enemy.url);
-        if (result.character && sceneData.imagePrompts.character) {
-          cacheImage(sceneData.imagePrompts.character, result.character.url);
-        }
-
-        console.log('[VisualBattleScene] Setting images in state.');
-        setImages({
-          background: result.background.url,
-          enemy: result.enemy.url,
-          character: result.character?.url,
-        });
       } catch (error) {
         console.error('[VisualBattleScene] Failed to generate or load battle scene images:', error);
       } finally {
@@ -114,36 +160,43 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
     loadImages();
   }, [sceneData]);
 
-  if (isLoading || !sceneData) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-purple-500 mb-6 mx-auto"></div>
-          <p className="text-purple-300 text-2xl font-bold">Generating scene...</p>
-        </div>
-      </div>
-    );
-  }
+  // Delay showing loading screen to allow animation overlay to complete
+  useEffect(() => {
+    if (isLoading && !sceneData) {
+      // Wait 2.3 seconds for animation to complete (2s animation + 300ms fade)
+      const timer = setTimeout(() => {
+        setShowLoadingScreen(true);
+      }, 2300);
 
-  if (generatingImages) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-900">
-        <div className="text-center max-w-2xl px-8">
-          <div className="animate-pulse mb-6">
-            <div className="text-6xl mb-4">🎨</div>
-            <div className="h-2 bg-purple-600 rounded-full overflow-hidden">
-              <div className="h-full bg-purple-400 animate-shimmer"></div>
-            </div>
-          </div>
-          <p className="text-purple-300 text-2xl font-bold mb-2">Creating pixel art...</p>
-          <p className="text-gray-400 text-sm">This may take 5-10 seconds</p>
-        </div>
-      </div>
-    );
+      return () => clearTimeout(timer);
+    } else if (!isLoading) {
+      setShowLoadingScreen(false);
+    }
+  }, [isLoading, sceneData]);
+
+  // Determine loading stage
+  if ((showLoadingScreen || generatingImages || (!sceneData && !isLoading)) && !sceneData) {
+    let stage: 'processing' | 'generating' | 'creating_art' = 'generating';
+
+    if (generatingImages) {
+      stage = 'creating_art';
+    } else if (showLoadingScreen) {
+      stage = 'generating';
+    } else if (!sceneData) {
+      stage = 'processing';
+    }
+
+    return <SceneGenerationLoading stage={stage} />;
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-900 overflow-hidden">
+    <div
+      className="w-full h-full flex flex-col overflow-hidden"
+      style={{
+        backgroundColor: '#1a1a1a',
+        fontFamily: 'monospace'
+      }}
+    >
       {/* Battle Scene Display */}
       <div className="flex-1 relative flex items-center justify-center overflow-hidden">
         {/* Background Image */}
@@ -157,38 +210,22 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
         )}
 
         {/* Dark overlay for readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60"></div>
-
-        {/* Character and Enemy Sprites */}
-        <div className="relative z-10 w-full h-full flex items-center justify-between px-16">
-          {/* Player Character (bottom-left) */}
-          {characterClass && (
-            <div className="flex flex-col items-center mb-16">
-              <div className="bg-black/50 backdrop-blur-sm px-4 py-2 rounded-lg mb-4">
-                <p className="text-green-400 font-bold text-lg">{characterClass}</p>
-              </div>
-              <div className="w-48 h-48 bg-black/30 backdrop-blur-sm rounded-lg border-4 border-green-500 flex items-center justify-center">
-                <span className="text-8xl">{getCharacterEmoji(characterClass)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Enemy Sprite (top-right) */}
-          {images.enemy && (
-            <div className="flex flex-col items-center mt-16">
-              <img
-                src={images.enemy}
-                alt="Enemy"
-                className="w-64 h-64 object-contain drop-shadow-2xl"
-                style={{imageRendering: 'pixelated', filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.8))'}}
-              />
-            </div>
-          )}
-        </div>
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 50%, rgba(0,0,0,0.6) 100%)'
+          }}
+        ></div>
       </div>
 
       {/* Story Text & Choices - Bottom Panel */}
-      <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent p-8 border-t-4 border-purple-600">
+      <div
+        className="p-8"
+        style={{
+          background: 'linear-gradient(to top, #1a1a1a 0%, rgba(26,26,26,0.95) 80%, transparent 100%)',
+          borderTop: '4px solid #5c3d2e'
+        }}
+      >
         {/* Scene Description */}
         <div className="max-w-4xl mx-auto mb-6">
           <div className="bg-black/70 backdrop-blur-md rounded-xl p-6 border-2 border-purple-500/50">
@@ -200,29 +237,85 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
 
         {/* Action Choices */}
         <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex flex-wrap justify-center gap-4">
             {sceneData.choices.map((choice) => {
               const getButtonStyle = () => {
                 switch (choice.type) {
                   case 'conclude':
-                    return 'bg-purple-600 hover:bg-purple-700 border-purple-400 shadow-purple-500/50';
+                    return {
+                      backgroundColor: '#7b1fa2',
+                      borderColor: '#4a0e4e',
+                      shadowColor: '#4a0e4e'
+                    };
+                  case 'combat':
+                  case 'damage':
+                    return {
+                      backgroundColor: '#c9534f',
+                      borderColor: '#8b3a34',
+                      shadowColor: '#8b3a34'
+                    };
+                  case 'dialogue':
+                    return {
+                      backgroundColor: '#5a8fc9',
+                      borderColor: '#3d5f82',
+                      shadowColor: '#3d5f82'
+                    };
+                  case 'heal':
+                    return {
+                      backgroundColor: '#6fa85c',
+                      borderColor: '#4a7a3d',
+                      shadowColor: '#4a7a3d'
+                    };
                   default:
-                    return 'bg-gray-600 hover:bg-gray-700 border-gray-400 shadow-gray-500/50';
+                    return {
+                      backgroundColor: '#8b6f47',
+                      borderColor: '#5c3d2e',
+                      shadowColor: '#5c3d2e'
+                    };
                 }
               };
+
+              const buttonStyle = getButtonStyle();
 
               return (
                 <button
                   key={choice.id}
                   onClick={() => onChoice(choice.id, choice.type, choice.value)}
-                  className={`${getButtonStyle()} text-white font-bold px-6 py-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 hover:-translate-y-1 shadow-lg active:scale-95`}
+                  className="transition-all active:translate-y-2"
+                  style={{
+                    backgroundColor: buttonStyle.backgroundColor,
+                    border: `5px solid ${buttonStyle.borderColor}`,
+                    borderRadius: '4px',
+                    boxShadow: `0 8px 0 ${buttonStyle.shadowColor}`,
+                    color: '#f4e8d0',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    letterSpacing: '1px',
+                    padding: '16px 24px',
+                    cursor: 'pointer',
+                    minWidth: '180px'
+                  }}
                   disabled={generatingImages}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = `0 12px 0 ${buttonStyle.shadowColor}`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = `0 8px 0 ${buttonStyle.shadowColor}`;
+                  }}
                 >
                   <div className="flex items-center justify-center">
                     {choice.text}
                   </div>
                   { (choice.type === 'damage' || choice.type === 'combat' || choice.type === 'heal') && choice.value !== undefined && (
-                    <span className="block text-sm mt-1 opacity-90">
+                    <span style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      marginTop: '4px',
+                      opacity: 0.9,
+                      color: '#e8d4b0'
+                    }}>
                       {choice.type === 'damage' || choice.type === 'combat'
                         ? `${choice.value} damage`
                         : `+${choice.value} HP`}

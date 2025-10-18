@@ -43,11 +43,29 @@ export interface GameObject {
   id: string;
   position: Position;
   type: 'npc' | 'enemy' | 'item' | 'exit' | 'entrance';
-  sprite: string; // emoji or character
+  sprite: string;
+  spriteUrl?: string;
   interactionText: string;
   hasInteracted?: boolean;
-  itemDrop?: Item; // Optional item dropped when defeated/collected
-  enemyLevel?: number; // For scaling enemy difficulty
+  itemDrop?: Item;
+  enemyLevel?: number;
+  visualIdentity?: {
+    imagePrompts: {
+      background: string;
+      character: string;
+    };
+    appearance: string;
+    cachedImages?: {
+      background?: string;
+      character?: string;
+    };
+  };
+  interactionHistory?: {
+    count: number;
+    lastInteraction: number;
+    previousChoices: string[];
+    conversationSummary?: string;
+  };
 }
 
 export interface Room {
@@ -114,9 +132,9 @@ export interface GameState {
   experienceToNextLevel: number;
   isAlive: boolean;
   storySeed: number;
-  storyContext: string | null; // User-provided story for narrative generation
-  storyMode: StoryMode; // How the AI should use the story
-  biomeProgression: string[]; // AI-generated biome progression for all rooms
+  storyContext: string | null;
+  storyMode: StoryMode;
+  biomeProgression: string[];
   isInGame: boolean;
   playerPosition: Position;
   currentRoomId: string;
@@ -128,4 +146,5 @@ export interface GameState {
   storyConsequences: StoryConsequence[];
   nextRoomScenePromise?: Promise<string | null>; // Promise for pre-generating next room's scene
   previousRoomId?: string; // Track previous room for scene transitions
+  isGeneratingRoom: boolean;
 }

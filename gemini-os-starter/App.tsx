@@ -7,9 +7,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CHARACTER_CLASSES, CharacterClass } from './characterClasses';
 import { AnimationOverlay } from './components/AnimationOverlay';
 import { AudioManager } from './components/AudioManager';
-import { BattleUI } from './components/BattleUI';
 import { CharacterSelection } from './components/CharacterSelection';
 import { ClassGenerationLoading } from './components/ClassGenerationLoading';
+import { RoomGenerationLoading } from './components/RoomGenerationLoading';
 import { GameCanvas } from './components/GameCanvas';
 import { GameHUD } from './components/GameHUD';
 import { StoryInput } from './components/StoryInput';
@@ -21,6 +21,8 @@ import { streamAppContent, generateBiomeProgression } from './services/geminiSer
 import { generateRoom } from './services/roomGenerator';
 import { generateRoomPair } from './services/roomPairGenerator';
 import { eventLogger } from './services/eventLogger';
+import { enhanceRoomWithSprites } from './services/roomSpriteEnhancer';
+import { roomCache } from './services/roomCache';
 import {
   BattleAnimation,
   BattleState,
@@ -69,7 +71,11 @@ const App: React.FC = () => {
 
   const [showStoryInput, setShowStoryInput] = useState<boolean>(true);
   const [isGeneratingClasses, setIsGeneratingClasses] = useState<boolean>(false);
+  const [classGenerationStep, setClassGenerationStep] = useState<'analyzing' | 'world' | 'classes' | 'sprites' | 'complete'>('analyzing');
   const [availableClasses, setAvailableClasses] = useState<CharacterClass[]>(CHARACTER_CLASSES);
+  const [roomGenerationProgress, setRoomGenerationProgress] = useState<number>(0);
+  const [roomGenerationStep, setRoomGenerationStep] = useState<string>('Preparing room...');
+  const [isStartingGame, setIsStartingGame] = useState<boolean>(false);
 
   // Game state with pixel art battles
   const [gameState, setGameState] = useState<GameState>({
@@ -95,6 +101,7 @@ const App: React.FC = () => {
     battleState: null,
     inventory: [],
     storyConsequences: [],
+    isGeneratingRoom: false,
   });
 
   const [sceneData, setSceneData] = useState<BattleSceneData | null>(null);
@@ -143,12 +150,15 @@ const App: React.FC = () => {
   const handleStorySubmit = useCallback(async (story: string | null, mode: 'inspiration' | 'recreation' | 'continuation') => {
     setShowStoryInput(false);
     setIsGeneratingClasses(true);
+    setClassGenerationStep('analyzing');
 
     try {
-      // Generate biome progression based on story context
+      // Step 1: Generate biome progression based on story context
+      setClassGenerationStep('world');
       const biomeProgression = await generateBiomeProgression(story, mode, 20);
 
-      // Generate character classes based on story and mode
+      // Step 2: Generate character classes based on story and mode
+      setClassGenerationStep('classes');
       const generatedClasses = await generateCharacterClasses(story, mode);
 
       // Update game state with story context and biome progression
@@ -160,6 +170,7 @@ const App: React.FC = () => {
       }));
 
       setAvailableClasses(generatedClasses);
+      setClassGenerationStep('complete');
     } catch (error) {
       console.error('Failed to generate game content:', error);
       setAvailableClasses(CHARACTER_CLASSES); // Fallback to defaults
@@ -175,10 +186,22 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Handle character selection
   const handleCharacterSelect = useCallback(async (character: CharacterClass) => {
     try {
+      // Immediately show loading state
+      setIsStartingGame(true);
       setIsLoading(true);
+
+      // Small delay to ensure UI updates before heavy processing
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
+      setRoomGenerationProgress(0);
+      setRoomGenerationStep('Analyzing story context...');
+
+      // Initialize room cache
+      roomCache.initialize(gameState.storySeed);
+
       console.log('[App] Generating initial room pair (0 + 1)...');
 
       const biomeKey0 = gameState.biomeProgression[0] || 'forest';
@@ -200,12 +223,25 @@ const App: React.FC = () => {
         gameState.storyMode
       );
 
+      setRoomGenerationProgress(30);
+      setRoomGenerationStep('Creating NPCs and enemies...');
+
       console.log('[App] Room pair generated, room0 has scene:', !!room0.sceneImage);
       console.log('[App] Room pair generated, room1 has scene:', !!room1.sceneImage);
 
       const rooms = new Map<string, Room>();
       rooms.set('room_0', room0);
       rooms.set('room_1', room1);
+
+      setRoomGenerationProgress(60);
+      setRoomGenerationStep('Generating sprites...');
+
+      // Save rooms to cache
+      roomCache.saveRoom(room0);
+      roomCache.saveRoom(room1);
+
+      setRoomGenerationProgress(90);
+      setRoomGenerationStep('Building environment...');
 
       // Set player spawn position from tile map
       const spawnPosition = room0.tileMap?.spawnPoint || {x: 400, y: 300};
@@ -237,34 +273,38 @@ const App: React.FC = () => {
         inventory: [],
         storyConsequences: [],
         previousRoomId: undefined,
+        isGeneratingRoom: false,
       }));
 
+      setRoomGenerationProgress(100);
       console.log('[App] Initial room pair (0 + 1) generated successfully, game starting!');
     } catch (error) {
       console.error('[App] Failed to generate initial rooms:', error);
       setError('Failed to generate initial rooms. Please try again.');
     } finally {
       setIsLoading(false);
+      setIsStartingGame(false);
     }
   }, [gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression]);
-
 
   // Handle player movement
   const handlePlayerMove = useCallback((newPosition: Position) => {
     setGameState((prev) => ({...prev, playerPosition: newPosition}));
   }, []);
 
-  // Handle screen exit (moving to edge)
   const handleScreenExit = useCallback(
     async (direction: 'right' | 'left' | 'up' | 'down') => {
+      setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
+      setRoomGenerationProgress(0);
+      setRoomGenerationStep('Analyzing story context...');
+
       const newRoomCounter = gameState.roomCounter + 1;
       const newRoomId = `room_${newRoomCounter}`;
 
-      // Get biome for this room from progression
       const biomeKey = gameState.biomeProgression[newRoomCounter] || 'forest';
 
-      // Check if room already exists (pre-generated)
-      let newRoom = gameState.rooms.get(newRoomId);
+      // Check if room already exists (pre-generated in memory or cache)
+      let newRoom = gameState.rooms.get(newRoomId) || roomCache.getRoom(newRoomId);
 
       if (!newRoom) {
         // Check if room is currently being generated in background
@@ -272,13 +312,19 @@ const App: React.FC = () => {
 
         if (generationPromise) {
           console.log(`[App] Room ${newRoomId} is being generated, waiting for completion...`);
+          setRoomGenerationProgress(25);
+          setRoomGenerationStep('Loading pre-generated room...');
 
           try {
             // Wait for the ongoing generation to complete
             newRoom = await generationPromise;
             console.log(`[App] Room ${newRoomId} generation completed, using pre-generated room`);
+            setRoomGenerationProgress(70);
           } catch (error) {
-            console.error(`[App] Pre-generation failed for ${newRoomId}, falling back to single room generation:`, error);
+            console.error(`[App] Pre-generation failed for ${newRoomId}, falling back to room generation:`, error);
+            setRoomGenerationProgress(25);
+            setRoomGenerationStep('Creating NPCs and enemies...');
+
             // Fallback: generate single room
             const currentRoom = gameState.rooms.get(gameState.currentRoomId);
             newRoom = await generateRoom(
@@ -290,10 +336,19 @@ const App: React.FC = () => {
               gameState.storyMode,
               currentRoom?.description
             );
+
+            setRoomGenerationProgress(50);
+            setRoomGenerationStep('Generating sprites...');
+
+            // Enhance with sprites if needed
+            newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext, newRoomCounter, gameState.storyMode);
           }
         } else {
           // Room not pre-generated and not being generated, generate it now
           console.log(`[App] Room ${newRoomId} not pre-generated, generating now...`);
+          setRoomGenerationProgress(25);
+          setRoomGenerationStep('Creating NPCs and enemies...');
+
           const currentRoom = gameState.rooms.get(gameState.currentRoomId);
 
           newRoom = await generateRoom(
@@ -305,7 +360,21 @@ const App: React.FC = () => {
             gameState.storyMode,
             currentRoom?.description
           );
+
+          setRoomGenerationProgress(50);
+          setRoomGenerationStep('Generating sprites...');
+
+          // Enhance with sprites
+          newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext, newRoomCounter, gameState.storyMode);
         }
+
+        // Save to cache
+        setRoomGenerationProgress(90);
+        setRoomGenerationStep('Building environment...');
+        roomCache.saveRoom(newRoom);
+      } else {
+        console.log(`[App] Room ${newRoomId} found in cache or memory`);
+        setRoomGenerationProgress(70);
       }
 
       // Log room entry
@@ -369,8 +438,11 @@ const App: React.FC = () => {
           rooms: newRooms,
           roomCounter: newRoomCounter,
           previousRoomId: prev.currentRoomId,
+          isGeneratingRoom: false,
         };
       });
+
+      setRoomGenerationProgress(100);
 
       // Pre-generate next room pair (N+1 and N+2) in the background with panorama
       const nextRoomCounter = newRoomCounter + 1;
@@ -415,6 +487,10 @@ const App: React.FC = () => {
 
         // Handle completion
         pairGenerationPromise.then(({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
+          // Save to cache
+          roomCache.saveRoom(nextRoom);
+          roomCache.saveRoom(nextNextRoom);
+
           setGameState((prev) => {
             const newRooms = new Map(prev.rooms);
             newRooms.set(nextRoomId, nextRoom);
@@ -494,7 +570,7 @@ const App: React.FC = () => {
   }, []);
 
   const internalHandleLlmRequest = useCallback(
-    async (historyForLlm: InteractionData[], maxHistoryLength: number, updatedHP?: number) => {
+    async (historyForLlm: InteractionData[], maxHistoryLength: number, updatedHP?: number, interactingObject?: GameObject) => {
       if (historyForLlm.length === 0) {
         setError('No interaction data to process.');
         return;
@@ -510,12 +586,13 @@ const App: React.FC = () => {
           historyForLlm,
           maxHistoryLength,
           gameState.selectedCharacter?.name,
-          updatedHP ?? gameState.currentHP, // Use updatedHP if provided
+          updatedHP ?? gameState.currentHP,
           gameState.storySeed,
           gameState.level,
           gameState.storyConsequences,
           gameState.storyContext,
           gameState.storyMode,
+          interactingObject?.visualIdentity
         );
         for await (const chunk of stream) {
           accumulatedContent += chunk;
@@ -531,9 +608,42 @@ const App: React.FC = () => {
 
           const parsedScene: BattleSceneData = JSON.parse(jsonText);
 
-          // Validate that required fields exist
-          if (!parsedScene.scene || !parsedScene.imagePrompts || !parsedScene.choices) {
+          if (!parsedScene.scene || !parsedScene.choices) {
             throw new Error('Missing required fields in AI response');
+          }
+
+          const biomeKey = gameState.biomeProgression[gameState.roomCounter] || 'forest';
+          parsedScene.characterSprite = gameState.selectedCharacter?.spriteUrl;
+          parsedScene.enemySprite = interactingObject?.spriteUrl;
+          parsedScene.biome = biomeKey;
+          parsedScene.interactionContext = parsedScene.scene;
+
+          if (interactingObject && !interactingObject.visualIdentity && parsedScene.imagePrompts) {
+            const updatedObject = {
+              ...interactingObject,
+              visualIdentity: {
+                imagePrompts: {
+                  background: parsedScene.imagePrompts.background,
+                  character: parsedScene.imagePrompts.enemy || parsedScene.imagePrompts.character || ''
+                },
+                appearance: `${interactingObject.interactionText}`
+              }
+            };
+
+            setGameState((prev) => {
+              const room = prev.rooms.get(prev.currentRoomId);
+              if (!room) return prev;
+
+              const updatedObjects = room.objects.map((obj) =>
+                obj.id === interactingObject.id ? updatedObject : obj
+              );
+
+              const updatedRoom = {...room, objects: updatedObjects};
+              const newRooms = new Map(prev.rooms);
+              newRooms.set(prev.currentRoomId, updatedRoom);
+
+              return {...prev, rooms: newRooms};
+            });
           }
 
           setSceneData(parsedScene);
@@ -555,77 +665,74 @@ const App: React.FC = () => {
   // Handle object interaction
   const handleObjectInteract = useCallback(
     (object: GameObject) => {
-    if (object.type === 'enemy') {
-        eventLogger.logEvent(
-          'battle_start',
-          gameState.currentRoomId,
-          gameState.level,
-          gameState.currentHP,
-          `Started battle with ${object.interactionText}`,
-          { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
-        );
+      const eventType = object.type === 'enemy' ? 'battle_start' : 'npc_interaction';
+      const eventMessage = object.type === 'enemy' 
+        ? `Started battle with ${object.interactionText}`
+        : `Interacted with ${object.interactionText}`;
+      const eventData = object.type === 'enemy'
+        ? { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
+        : { npcId: object.id, npcName: object.interactionText };
 
-        setGameState(prev => ({
-          ...prev,
-          battleState: {
-            enemy: object,
-            enemyHP: 100,
-            maxEnemyHP: 100,
-            status: 'ongoing',
-            turn: 'player',
-            history: [],
-            animationQueue: [],
+      eventLogger.logEvent(
+        eventType,
+        gameState.currentRoomId,
+        gameState.level,
+        gameState.currentHP,
+        eventMessage,
+        eventData
+      );
+
+      setCurrentInteractingObject(object);
+
+      setGameState((prev) => {
+        const room = prev.rooms.get(prev.currentRoomId);
+        if (!room) return prev;
+
+        const updatedObjects = room.objects.map((obj) => {
+          if (obj.id === object.id) {
+            const interactionCount = (obj.interactionHistory?.count || 0) + 1;
+            return {
+              ...obj,
+              hasInteracted: true,
+              interactionHistory: {
+                count: interactionCount,
+                lastInteraction: Date.now(),
+                previousChoices: obj.interactionHistory?.previousChoices || [],
+                conversationSummary: obj.interactionHistory?.conversationSummary
+              }
+            };
           }
-        }));
-      } else {
-        eventLogger.logEvent(
-          'npc_interaction',
-          gameState.currentRoomId,
-          gameState.level,
-          gameState.currentHP,
-          `Interacted with ${object.interactionText}`,
-          { npcId: object.id, npcName: object.interactionText }
-        );
-
-        setCurrentInteractingObject(object);
-
-        setGameState((prev) => {
-          const room = prev.rooms.get(prev.currentRoomId);
-          if (!room) return prev;
-
-          const updatedObjects = room.objects.map((obj) =>
-            obj.id === object.id ? {...obj, hasInteracted: true} : obj,
-          );
-
-          const updatedRoom = {...room, objects: updatedObjects};
-          const newRooms = new Map(prev.rooms);
-          newRooms.set(prev.currentRoomId, updatedRoom);
-
-          return {...prev, rooms: newRooms};
+          return obj;
         });
 
-        // Create interaction data for AI
-        const interactionData: InteractionData = {
-          id: object.id,
-          type: object.type,
-          elementText: `${object.interactionText} (${object.sprite})`,
-          elementType: 'game_object',
-          appContext: 'roguelike_game',
-        };
+        const updatedRoom = {...room, objects: updatedObjects};
+        const newRooms = new Map(prev.rooms);
+        newRooms.set(prev.currentRoomId, updatedRoom);
 
-        const newHistory = [
-          interactionData,
-          ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
-        ];
-        setInteractionHistory(newHistory);
-        setSceneData(null);
-        setError(null);
-        setShowAIDialog(true);
+        return {...prev, rooms: newRooms};
+      });
 
-        internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
-      }
+      const interactionData: InteractionData = {
+        id: object.id,
+        type: object.type,
+        elementText: `${object.interactionText} (${object.sprite})`,
+        elementType: 'game_object',
+        appContext: 'roguelike_game',
+      };
+
+      const newHistory = [
+        interactionData,
+        ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
+      ];
+      setInteractionHistory(newHistory);
+      setError(null);
+      setShowAIDialog(true);
+      setIsLoading(true);
+      setSceneData(null);
+
+      internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, gameState.currentRoomId, gameState.level, gameState.currentHP],
   );
 
   const handleCombatChoice = useCallback(
@@ -781,13 +888,38 @@ const App: React.FC = () => {
         ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
       ];
       setInteractionHistory(newHistory);
+
+      setGameState((prev) => {
+        const room = prev.rooms.get(prev.currentRoomId);
+        if (!room || !currentInteractingObject) return prev;
+
+        const updatedObjects = room.objects.map((obj) => {
+          if (obj.id === currentInteractingObject.id && obj.interactionHistory) {
+            return {
+              ...obj,
+              interactionHistory: {
+                ...obj.interactionHistory,
+                previousChoices: [...obj.interactionHistory.previousChoices, choiceText].slice(-5),
+              }
+            };
+          }
+          return obj;
+        });
+
+        const updatedRoom = {...room, objects: updatedObjects};
+        const newRooms = new Map(prev.rooms);
+        newRooms.set(prev.currentRoomId, updatedRoom);
+
+        return {...prev, rooms: newRooms};
+      });
+
       setSceneData(null);
       setError(null);
 
-      // Call LLM with the updated HP value
-      internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP);
+      // Start LLM request immediately (runs in background)
+      internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP, currentInteractingObject);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter, currentInteractingObject, gameState.currentRoomId],
   );
 
   const handleBattleAction = useCallback((action: string) => {
@@ -1042,10 +1174,10 @@ const App: React.FC = () => {
     setCurrentInteractingObject(null);
   }, []);
 
-  // Restart game
   const handleRestart = useCallback(() => {
     const newSeed = Math.floor(Math.random() * 10000);
     eventLogger.reset();
+    roomCache.reset();
     setGameState({
       selectedCharacter: null,
       currentHP: 0,
@@ -1069,6 +1201,7 @@ const App: React.FC = () => {
       battleState: null,
       inventory: [],
       storyConsequences: [],
+      isGeneratingRoom: false,
     });
     setSceneData(null);
     setError(null);
@@ -1101,17 +1234,26 @@ const App: React.FC = () => {
           {showStoryInput ? (
             <StoryInput onSubmit={handleStorySubmit} />
           ) : isGeneratingClasses ? (
-            <ClassGenerationLoading />
-          ) : isLoading ? (
-            <div className="flex flex-col items-center justify-center h-full">
-              <div className="text-6xl mb-4 animate-bounce">🎨</div>
-              <div className="text-2xl text-white mb-2">Generating Your Adventure...</div>
-              <div className="text-lg text-gray-300">Creating panoramic scenes with AI</div>
-            </div>
+            <ClassGenerationLoading currentStep={classGenerationStep} />
+          ) : isLoading && isStartingGame ? (
+            <RoomGenerationLoading
+              currentStep={roomGenerationStep}
+              progress={roomGenerationProgress}
+            />
           ) : !gameState.selectedCharacter ? (
             <CharacterSelection
               characters={availableClasses}
               onSelectCharacter={handleCharacterSelect}
+              isStartingGame={isStartingGame}
+              onLoadingStateChange={(loading) => {
+                if (loading) {
+                  setClassGenerationStep('sprites');
+                  setIsGeneratingClasses(true);
+                } else {
+                  setIsGeneratingClasses(false);
+                  setClassGenerationStep('complete');
+                }
+              }}
             />
           ) : !gameState.isAlive ? (
             <div
@@ -1213,32 +1355,12 @@ const App: React.FC = () => {
 
               {/* Game Area */}
               <div className="flex-1 overflow-hidden relative" style={{backgroundColor: '#1a1a1a'}}>
-                {/* Room Description with Voice */}
-                {currentRoom && !showAIDialog && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '10px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 50,
-                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                    border: '2px solid #8B5CF6',
-                    borderRadius: '8px',
-                    padding: '12px 20px',
-                    maxWidth: '700px',
-                  }}>
-                    <div style={{
-                      color: '#e5e7eb',
-                      fontSize: '16px',
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                    }}>
-                      {currentRoom.description}
-                    </div>
-                  </div>
-                )}
-
-                {currentRoom && gameState.selectedCharacter && (
+                {gameState.isGeneratingRoom ? (
+                  <RoomGenerationLoading
+                    currentStep={roomGenerationStep}
+                    progress={roomGenerationProgress}
+                  />
+                ) : currentRoom && gameState.selectedCharacter ? (
                   <GameCanvas
                     character={gameState.selectedCharacter}
                     currentHP={gameState.currentHP}
@@ -1252,14 +1374,7 @@ const App: React.FC = () => {
                     room={currentRoom}
                     battleState={gameState.battleState}
                   />
-                )}
-
-                <BattleUI
-                  battleState={gameState.battleState}
-                  onPlayerAction={handleBattleAction}
-                  character={gameState.selectedCharacter}
-                  currentMana={gameState.currentMana}
-                />
+                ) : null}
 
                 {/* Visual Battle Scene Overlay */}
                 {showAIDialog && (
@@ -1321,6 +1436,7 @@ const App: React.FC = () => {
                         onChoice={handleCombatChoice}
                         isLoading={isLoading}
                         characterClass={gameState.selectedCharacter?.name}
+                        characterSprite={gameState.selectedCharacter?.spriteUrl}
                       />
                     )}
                   </div>

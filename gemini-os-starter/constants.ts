@@ -32,7 +32,11 @@ export const getSystemPrompt = (
   consequences?: Array<{type: string; description: string}>,
   storyContext?: string | null,
   storyMode?: string,
-  eventContext?: string
+  eventContext?: string,
+  existingVisualIdentity?: {
+    imagePrompts: { background: string; character: string };
+    appearance: string;
+  }
 ): string => {
   let storyInstructions = '';
 
@@ -131,6 +135,25 @@ Your entire response must be a single, valid JSON object. Do not use markdown. D
 4.  **Style Guide:** All image prompts must end with the phrase: ', 16-bit pixel art, top-down RPG style'.
     *   *Background Example:* "A dark forest clearing with ancient trees and moss-covered stones, 16-bit pixel art, top-down RPG style"
     *   *Enemy Example:* "A fierce goblin warrior with green skin and a rusty sword, 16-bit pixel art, top-down RPG style"
+
+${existingVisualIdentity ? `
+**VISUAL CONSISTENCY REQUIREMENT - CRITICAL**
+This NPC/character has an ESTABLISHED VISUAL IDENTITY that MUST be preserved:
+- Appearance: ${existingVisualIdentity.appearance}
+- Background Prompt: ${existingVisualIdentity.imagePrompts.background}
+- Character Prompt: ${existingVisualIdentity.imagePrompts.character}
+
+YOU MUST return the EXACT SAME image prompts:
+{
+  "imagePrompts": {
+    "background": "${existingVisualIdentity.imagePrompts.background}",
+    "character": "${existingVisualIdentity.imagePrompts.character}"
+  }
+}
+
+DO NOT CHANGE: gender, age, clothing, appearance, or any visual details.
+This is the SAME character the player has met before. Keep them IDENTICAL.
+` : ''}
 
 **GAMEPLAY RULES**
 1.  **Encounters:** If the player interacts with an enemy, create a combat scene. If they interact with an item or NPC, create a dialogue or discovery scene.

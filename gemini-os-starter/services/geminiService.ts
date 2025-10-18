@@ -21,7 +21,7 @@ const ai = new GoogleGenAI({apiKey: process.env.API_KEY!}); // The "!" asserts A
 
 export async function* streamAppContent(
   interactionHistory: InteractionData[],
-  currentMaxHistoryLength: number, // Receive current max history length
+  currentMaxHistoryLength: number,
   characterClass?: string,
   characterHP?: number,
   storySeed?: number,
@@ -29,6 +29,10 @@ export async function* streamAppContent(
   consequences?: Array<{type: string; description: string}>,
   storyContext?: string | null,
   storyMode?: string,
+  existingVisualIdentity?: {
+    imagePrompts: { background: string; character: string };
+    appearance: string;
+  }
 ): AsyncGenerator<string, void, void> {
   const model = 'gemini-2.5-flash-lite'; // Updated model
 
@@ -58,7 +62,8 @@ export async function* streamAppContent(
     consequences,
     storyContext,
     storyMode,
-    eventContext
+    eventContext,
+    existingVisualIdentity
   ); // Generate system prompt dynamically with game context
 
   const currentInteraction = interactionHistory[0];
@@ -241,35 +246,45 @@ export async function generateBiomeProgression(
     return Array(numRooms).fill('forest');
   }
 
-  const availableBiomes = [
-    'forest', 'swamp', 'desert', 'ice', 'cave', 'dungeon', 'plains',
-    'castle', 'volcanic', 'beach', 'darkforest', 'crystalcave', 'ruins',
-    'city', 'space'
-  ];
-
   const contextDescription = storyContext
     ? `Story: "${storyContext.slice(0, 500)}..." (${storyMode} mode)`
     : 'Generic fantasy adventure';
 
-  const prompt = `You are a game designer creating a ${numRooms}-room dungeon progression.
+  const isFantasyStory = !storyContext ||
+    /fantasy|magic|dragon|dungeon|medieval|sword|wizard|elf|dwarf/i.test(storyContext);
+
+  const prompt = `You are a game designer creating a ${numRooms}-room progression for a story-based game.
 
 ${contextDescription}
 
-Available biomes: ${availableBiomes.join(', ')}
+IMPORTANT: Create location names that FIT THE STORY CONTEXT!
 
-Create a logical progression of environments that:
-1. Starts appropriate to the story setting
-2. Gradually increases in difficulty/intensity
-3. Makes narrative sense for this story
-4. Ends with a climactic final area
+${isFantasyStory ? `
+For fantasy stories, you can use these pre-made biomes:
+forest, swamp, desert, ice, cave, dungeon, plains, castle, volcanic, beach, darkforest, crystalcave, ruins, city, space
+` : `
+For NON-FANTASY stories (modern, sports, sci-fi, historical, etc.), CREATE CUSTOM LOCATION NAMES that match the story!
 
-You can suggest new biome names if needed (we'll generate them with AI if they don't exist).
+Examples:
+- Soccer/Football story: "training_ground", "local_stadium", "national_championship", "world_cup_qualifier", "world_cup_final"
+- Modern thriller: "apartment", "office_building", "subway", "warehouse", "penthouse"
+- Space story: "space_station", "cargo_bay", "engine_room", "command_center", "alien_ship"
+- Historical: "village", "market", "palace", "battlefield", "throne_room"
+`}
 
-Return ONLY a JSON array of exactly ${numRooms} biome names:
-["biome1", "biome2", "biome3", ...]
+Create a logical progression that:
+1. Starts appropriate to the story setting (e.g., training ground for sports, apartment for thriller)
+2. Gradually increases in stakes/intensity (e.g., local matches → national → world cup)
+3. Makes narrative sense for THIS SPECIFIC story
+4. Ends with the most climactic/important location (e.g., world cup final, final boss location)
 
-Example for "Lord of the Rings":
-["plains", "forest", "darkforest", "cave", "ruins", "dungeon", "volcanic"]`;
+Use UNDERSCORES for multi-word locations (e.g., "training_ground", "world_cup_final", "local_stadium")
+
+Return ONLY a JSON array of exactly ${numRooms} location names:
+["location1", "location2", "location3", ...]
+
+Example for "Lionel Messi winning World Cup":
+["training_ground", "practice_match", "local_stadium", "national_league", "champions_league", "world_cup_qualifier", "group_stage", "knockout_round", "quarterfinal", "semifinal", "world_cup_final"]`;
 
   try {
     console.log('[GeminiService] Generating biome progression...');

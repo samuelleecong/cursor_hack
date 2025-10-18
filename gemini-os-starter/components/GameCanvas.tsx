@@ -27,6 +27,68 @@ const VIEWPORT_HEIGHT = 800;
 const PLAYER_SIZE = 35;
 const MOVE_SPEED = 3;
 
+const spriteImageCache = new Map<string, HTMLImageElement>();
+
+function loadSpriteImage(url: string): Promise<HTMLImageElement> {
+  if (spriteImageCache.has(url)) {
+    return Promise.resolve(spriteImageCache.get(url)!);
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      spriteImageCache.set(url, img);
+      resolve(img);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function drawSprite(
+  ctx: CanvasRenderingContext2D,
+  obj: GameObject,
+  x: number,
+  y: number,
+  size: number = 50
+) {
+  if (obj.spriteUrl) {
+    const img = spriteImageCache.get(obj.spriteUrl);
+    if (img) {
+      ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+      return;
+    } else {
+      loadSpriteImage(obj.spriteUrl).catch(() => {});
+    }
+  }
+}
+
+function drawCharacterSprite(
+  ctx: CanvasRenderingContext2D,
+  character: any,
+  x: number,
+  y: number,
+  size: number = 50,
+  addGlow: boolean = true
+) {
+  if (character.spriteUrl) {
+    const img = spriteImageCache.get(character.spriteUrl);
+    if (img) {
+      if (addGlow) {
+        ctx.shadowColor = character.color || '#3b82f6';
+        ctx.shadowBlur = 20;
+      }
+      ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+      if (addGlow) {
+        ctx.shadowBlur = 0;
+      }
+      return;
+    } else {
+      loadSpriteImage(character.spriteUrl).catch(() => {});
+    }
+  }
+}
+
 export const GameCanvas: React.FC<GameCanvasProps> = ({
   character,
   currentHP,
@@ -403,7 +465,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
 
-        ctx.fillText(obj.sprite, obj.position.x, obj.position.y + bounce);
+        drawSprite(ctx, obj, obj.position.x, obj.position.y + bounce, 75);
         ctx.shadowBlur = 0;
 
         // Draw interaction indicator - ONLY for the closest object
@@ -426,12 +488,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       });
 
-      // Draw player shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.beginPath();
-      ctx.ellipse(playerPosition.x, playerPosition.y + 25, 20, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
-
       // Draw player with walking animation
       const playerBounce = isMoving ? Math.sin(Date.now() / 100) * 3 : 0;
 
@@ -439,11 +495,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      // Player glow
-      ctx.shadowColor = character.color;
-      ctx.shadowBlur = 15;
-      ctx.fillText(character.icon, playerPosition.x, playerPosition.y + playerBounce);
-      ctx.shadowBlur = 0;
+      drawCharacterSprite(ctx, character, playerPosition.x, playerPosition.y + playerBounce, 75);
 
       // DEBUG MODE: Draw collision points
       if (isDebugMode) {
@@ -474,13 +526,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const playerBattleX = VIEWPORT_WIDTH * 0.25;
         const playerBattleY = VIEWPORT_HEIGHT / 2;
         ctx.font = '80px Arial';
-        ctx.fillText(character.icon, playerBattleX, playerBattleY);
+        drawCharacterSprite(ctx, character, playerBattleX, playerBattleY, 150);
 
         // Enemy position and rendering
         const enemyBattleX = VIEWPORT_WIDTH * 0.75;
         const enemyBattleY = VIEWPORT_HEIGHT / 2;
         ctx.font = '80px Arial';
-        ctx.fillText(battleState.enemy.sprite, enemyBattleX, enemyBattleY);
+        drawSprite(ctx, battleState.enemy, enemyBattleX, enemyBattleY, 150);
 
         // Draw HP bars
         const drawHpBar = (x: number, y: number, currentHp: number, maxHp: number, color: string) => {
@@ -643,13 +695,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [playerPosition, objects, keys, character, onMove, onInteract, onScreenExit, roomDescription, room, facing, isMoving, cameraOffset, isDebugMode, battleState]);
 
   return (
-    <div className="flex items-center justify-center bg-gray-950 w-full h-full">
+    <div
+      className="flex items-center justify-center w-full h-full"
+      style={{ backgroundColor: '#1a1a1a' }}
+    >
       <canvas
         ref={canvasRef}
         width={VIEWPORT_WIDTH}
         height={VIEWPORT_HEIGHT}
-        className="border-4 border-purple-600 rounded-lg shadow-2xl"
-        style={{imageRendering: 'pixelated'}}
+        style={{
+          imageRendering: 'pixelated',
+          border: '8px solid #5c3d2e',
+          borderRadius: '4px',
+          boxShadow: '0 12px 0 #3d2817, inset 0 4px 0 rgba(255,255,255,0.05)'
+        }}
       />
     </div>
   );
