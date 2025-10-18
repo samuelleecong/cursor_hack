@@ -32,11 +32,11 @@ function buildSpritePrompt(params: SpriteGenerationParams): string {
   let prompt = `pixel art, 32x32, 16-bit style`;
 
   if (type === 'character') {
-    prompt += `, ${description}, hero character sprite, RPG protagonist`;
+    prompt += `, ${description}, hero character sprite, protagonist`;
   } else if (type === 'enemy') {
-    prompt += `, ${description}, enemy sprite, hostile creature`;
+    prompt += `, ${description}, antagonist sprite, opponent`;
   } else if (type === 'npc') {
-    prompt += `, ${description}, NPC sprite, friendly character`;
+    prompt += `, ${description}, character sprite`;
   } else if (type === 'item') {
     prompt += `, ${description}, item sprite, game object`;
   }
@@ -187,8 +187,9 @@ export async function generateEnemySprite(
   fallbackEmoji: string,
   storyContext?: string
 ): Promise<GeneratedSprite> {
-  const baseDescription = `${enemyDescription}, ${biome} creature`;
-  
+  // Don't add generic "creature" - the description is already specific
+  const baseDescription = `${enemyDescription} at ${biome}`;
+
   return generateSprite({
     description: baseDescription,
     type: 'enemy',
@@ -204,8 +205,9 @@ export async function generateNPCSprite(
   fallbackEmoji: string,
   storyContext?: string
 ): Promise<GeneratedSprite> {
-  const description = `${npcDescription}, ${biome} inhabitant`;
-  
+  // Don't add generic "inhabitant" - the description is already specific
+  const description = `${npcDescription} at ${biome}`;
+
   return generateSprite({
     description,
     type: 'npc',

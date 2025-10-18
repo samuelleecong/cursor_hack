@@ -228,6 +228,7 @@ export async function generateCharacterClasses(
     });
 
     let jsonText = response.text.trim();
+    console.log('[ClassGenerator] Raw response:', jsonText.substring(0, 500));
 
     // Remove markdown code blocks if present
     if (jsonText.startsWith('```')) {
@@ -235,34 +236,38 @@ export async function generateCharacterClasses(
     }
 
     const generatedClasses: CharacterClass[] = JSON.parse(jsonText);
+    console.log('[ClassGenerator] Parsed classes count:', generatedClasses?.length);
 
     // Validate the response
     if (!Array.isArray(generatedClasses) || generatedClasses.length !== 5) {
-      console.error('Invalid class generation response, using defaults');
+      console.error('[ClassGenerator] Invalid class generation response. Array:', Array.isArray(generatedClasses), 'Length:', generatedClasses?.length, 'Expected: 5');
+      console.error('[ClassGenerator] Response was:', JSON.stringify(generatedClasses, null, 2));
       return getDefaultClasses();
     }
 
     // Validate each class has required fields
     for (const cls of generatedClasses) {
-      if (
-        !cls.id ||
-        !cls.name ||
-        !cls.icon ||
-        !cls.color ||
-        !cls.description ||
-        !cls.startingHP ||
-        !cls.startingMana ||
-        !cls.attackType ||
-        !cls.baseDamage ||
-        cls.defense === undefined ||
-        cls.critChance === undefined ||
-        !cls.specialAbility ||
-        typeof cls.specialAbility !== 'object' ||
-        !cls.specialAbility.name ||
-        !cls.specialAbility.description ||
-        !cls.specialAbility.manaCost
-      ) {
-        console.error('Generated class missing required fields, using defaults');
+      const missingFields = [];
+      if (!cls.id) missingFields.push('id');
+      if (!cls.name) missingFields.push('name');
+      if (!cls.icon) missingFields.push('icon');
+      if (!cls.color) missingFields.push('color');
+      if (!cls.description) missingFields.push('description');
+      if (!cls.startingHP) missingFields.push('startingHP');
+      if (!cls.startingMana) missingFields.push('startingMana');
+      if (!cls.attackType) missingFields.push('attackType');
+      if (!cls.baseDamage) missingFields.push('baseDamage');
+      if (cls.defense === undefined) missingFields.push('defense');
+      if (cls.critChance === undefined) missingFields.push('critChance');
+      if (!cls.specialAbility) missingFields.push('specialAbility');
+      if (typeof cls.specialAbility !== 'object') missingFields.push('specialAbility (not object)');
+      if (cls.specialAbility && !cls.specialAbility.name) missingFields.push('specialAbility.name');
+      if (cls.specialAbility && !cls.specialAbility.description) missingFields.push('specialAbility.description');
+      if (cls.specialAbility && !cls.specialAbility.manaCost) missingFields.push('specialAbility.manaCost');
+
+      if (missingFields.length > 0) {
+        console.error('[ClassGenerator] Generated class missing required fields:', missingFields);
+        console.error('[ClassGenerator] Class data:', JSON.stringify(cls, null, 2));
         return getDefaultClasses();
       }
     }

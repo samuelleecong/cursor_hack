@@ -103,8 +103,28 @@ const extractGenre = (storyContext: string | null): string => {
   if (text.includes('pirate') || text.includes('ocean') || text.includes('ship')) {
     return 'pirate adventure';
   }
+  if (text.includes('sport') || text.includes('soccer') || text.includes('football') || text.includes('basketball') || text.includes('baseball')) {
+    return 'sports drama';
+  }
+  if (text.includes('thriller') || text.includes('crime') || text.includes('suspense')) {
+    return 'suspenseful thriller';
+  }
+  if (text.includes('romance') || text.includes('love')) {
+    return 'romantic drama';
+  }
+  if (text.includes('comedy') || text.includes('funny') || text.includes('humor')) {
+    return 'lighthearted comedy';
+  }
+  if (text.includes('historical') || text.includes('history') || text.includes('past')) {
+    return 'historical drama';
+  }
 
-  return 'fantasy adventure';
+  // Check for fantasy keywords before defaulting
+  if (text.includes('fantasy') || text.includes('magic') || text.includes('wizard') || text.includes('elf') || text.includes('dwarf')) {
+    return 'fantasy adventure';
+  }
+
+  return 'cinematic drama';
 };
 
 /**
@@ -206,7 +226,7 @@ const buildRoomMusicPrompt = async (context: MusicGenerationContext): Promise<st
   const moralTheme = getMoralTheme(context.recentConsequences);
 
   const roomDesc = context.currentRoom?.description || 'mysterious chamber';
-  const roomType = context.currentRoom?.type || 'dungeon';
+  const roomType = context.currentRoom?.type || context.currentRoom?.biome || 'location';
 
   // Story mode adaptation
   let modeContext = '';
