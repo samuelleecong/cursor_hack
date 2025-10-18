@@ -43,9 +43,10 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     storyContext,
     storyMode,
     previousRoomDescription,
+    tileMap,
   } = params;
 
-  // Biome descriptions - STYLE ONLY, no layout (only used if USE_BIOME_FOR_IMAGES is enabled)
+  // Biome descriptions - STYLE ONLY, no layout (fallback for legacy biomes)
   const biomeDescriptions: Record<BiomeType, string> = {
     forest: 'lush forest with ancient trees, moss-covered stones, dappled sunlight filtering through leaves',
     plains: 'open grasslands with rolling hills, wildflowers, and distant mountains in soft focus',
@@ -54,7 +55,19 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     dungeon: 'ancient stone corridors with flickering torches, crumbling walls, and mysterious shadows',
   };
 
-  const biomeStyle = USE_BIOME_FOR_IMAGES ? biomeDescriptions[biome] : 'generic fantasy RPG environment';
+  // CRITICAL FIX: Use biomeDefinition.atmosphere if available (for story-aware custom biomes)
+  // This ensures custom locations like "world_cup_final" use AI-generated atmosphere instead of generic "forest"
+  let biomeStyle: string;
+  if (tileMap?.biomeDefinition?.atmosphere && USE_BIOME_FOR_IMAGES) {
+    // Use the AI-generated atmosphere from the biome definition
+    biomeStyle = tileMap.biomeDefinition.atmosphere;
+    console.log(`[SceneGen] Using custom biome atmosphere: ${biomeStyle}`);
+  } else if (USE_BIOME_FOR_IMAGES) {
+    // Fallback to hardcoded descriptions for legacy biomes
+    biomeStyle = biomeDescriptions[biome] || 'generic fantasy RPG environment';
+  } else {
+    biomeStyle = 'generic fantasy RPG environment';
+  }
 
   // Summarize objects - VISUAL STYLE, not placement
   const enemies = objects.filter((o) => o.type === 'enemy');
@@ -72,37 +85,50 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     atmosphereHints += `Hints of treasure and discovery. `;
   }
 
-  // Story context integration - THEME ONLY
+  // Story context integration - THEME ONLY (CRITICAL for non-fantasy stories)
   let storySection = '';
   if (storyContext) {
     const modeInstructions: Record<StoryMode, string> = {
-      recreation: 'Match the visual style and atmosphere from the original story',
-      continuation: 'Show a world that has aged and evolved, with weathering and change',
-      inspiration: 'Capture the color palette, mood, and aesthetic themes',
+      recreation: 'Match the visual style and atmosphere from the original story. Use specific visual elements from the source material.',
+      continuation: 'Show a world that has aged and evolved, with weathering and change reflecting passage of time.',
+      inspiration: 'Capture the color palette, mood, and aesthetic themes. Every visual must feel authentic to this setting.',
     };
 
     storySection = `
-STORY THEME (${storyMode || 'inspiration'} mode):
-${storyContext.substring(0, 400)}...
+**CRITICAL STORY CONTEXT (${storyMode || 'inspiration'} mode):**
+"${storyContext.substring(0, 400)}..."
+
+MANDATORY REQUIREMENT: The visual style MUST reflect this specific story setting, NOT generic fantasy.
 ${modeInstructions[storyMode || 'inspiration']}
+If this is a modern, sports, sci-fi, or non-fantasy setting, DO NOT use medieval/fantasy visuals.
 `;
   }
+
+  // Get biome name for better context
+  const biomeName = tileMap?.biomeDefinition?.name || description;
 
   return `You are a visual style consultant for pixel art game scenes.
 
 ${storySection}
 
-SCENE: Room ${roomNumber} - ${description}
-${USE_BIOME_FOR_IMAGES ? `BIOME STYLE: ${biomeStyle}` : `STYLE: ${biomeStyle} based on room description`}
+LOCATION: ${biomeName} (Room ${roomNumber})
+DESCRIPTION: ${description}
+${USE_BIOME_FOR_IMAGES ? `ENVIRONMENT STYLE: ${biomeStyle}` : `STYLE: ${biomeStyle} based on room description`}
 ATMOSPHERE: ${atmosphereHints || 'peaceful, serene environment'}
 ${previousRoomDescription ? `CONTINUITY: Maintains visual consistency with previous area: ${previousRoomDescription}` : ''}
 
+${storyContext ? `\n**REMINDER: This is "${biomeName}" from the story context above. The visual style must match that narrative setting, not default to generic fantasy.**\n` : ''}
+
 Generate a STYLE-ONLY prompt for pixel art scene generation. Focus EXCLUSIVELY on:
 - Color palette (what colors dominate the scene?)
-- Texture and materials (grass, stone, wood, water, etc.)
+- Texture and materials (appropriate to the story setting - could be grass, concrete, metal, sand, etc.)
 - Lighting and mood (bright, dark, mysterious, welcoming?)
 - Atmospheric effects (fog, sunbeams, shadows, particle effects?)
+- Environmental richness (describe what fills the non-path areas - trees, rocks, buildings, crowds, etc.)
 - Art style consistency (16-bit RPG, Stardew Valley aesthetic, retro gaming)
+${storyContext ? '- Setting authenticity (ensure visuals match the narrative context)' : ''}
+
+IMPORTANT: Describe a rich, fully-filled scene with details throughout. The environment should feel complete and immersive.
 
 DO NOT mention:
 - Path layout, routes, or directions
@@ -176,12 +202,14 @@ export async function generateSingleRoomScene(
     // Build composition-aware prompt with explicit instructions
     const compositionPrompt = `${imagePrompt}
 
-CRITICAL COMPOSITION RULE:
-The reference image shows a YELLOW PATH on BLACK background. This path layout is SACRED and IMMUTABLE.
-Preserve the EXACT path coordinates while applying the artistic style described above.
-The yellow areas in the reference = walkable path (dirt trail, stone path, wooden planks, etc.).
-The black areas in the reference = obstacles/decoration (trees, rocks, water, walls, etc.).
-DO NOT move, bend, or reshape the path. ONLY stylize it.`;
+CRITICAL COMPOSITION RULES:
+1. The reference image shows a YELLOW PATH on BLACK background - this is a LAYOUT MASK, not literal colors.
+2. FILL THE ENTIRE 1000x800 CANVAS with the scene. NO black voids, NO empty space.
+3. Yellow areas in reference = walkable path (style as dirt trail, stone path, grass field, wooden planks, concrete, etc.)
+4. Black areas in reference = NON-WALKABLE zones (FILL with obstacles, decoration, environment details - trees, rocks, water, walls, buildings, crowd stands, etc.)
+5. Preserve the EXACT path shape and position. The path MUST flow from left edge to right edge.
+6. DO NOT leave any black background showing. Every pixel must be part of the styled scene.
+7. The entire canvas is your scene - use all 1000x800 pixels with rich environmental details.`;
 
     const generatedImage = await generatePixelArt({
       prompt: compositionPrompt,
@@ -223,13 +251,13 @@ export async function generateScenePanorama(
     console.log(`[SceneGen] Generating panorama prompts for rooms ${currentRoomParams.roomId} + ${nextRoomParams.roomId}...`);
 
     // Generate prompts using Gemini 2.5 Flash (15 req/min vs Pro's 2 req/min)
-    const currentResponse = ai.models.generateContentStream({
+    const currentResponsePromise = ai.models.generateContentStream({
       model: 'gemini-2.5-flash',
       contents: currentPromptRequest,
       config: {},
     });
 
-    const nextResponse = ai.models.generateContentStream({
+    const nextResponsePromise = ai.models.generateContentStream({
       model: 'gemini-2.5-flash',
       contents: nextPromptRequest,
       config: {},
@@ -239,11 +267,13 @@ export async function generateScenePanorama(
     let currentImagePrompt = '';
     let nextImagePrompt = '';
 
-    for await (const chunk of await currentResponse) {
+    const currentResponse = await currentResponsePromise;
+    for await (const chunk of currentResponse) {
       if (chunk.text) currentImagePrompt += chunk.text;
     }
 
-    for await (const chunk of await nextResponse) {
+    const nextResponse = await nextResponsePromise;
+    for await (const chunk of nextResponse) {
       if (chunk.text) nextImagePrompt += chunk.text;
     }
 
@@ -274,12 +304,16 @@ Seamlessly blended artistic styles with unified lighting and color harmony. Natu
     // Build composition-aware panorama prompt
     const panoramaCompositionPrompt = `${panoramaStylePrompt}
 
-CRITICAL COMPOSITION RULE:
-The reference image is a 2000x800 panorama showing TWO CONNECTED PATHS in YELLOW on BLACK background.
-LEFT HALF (0-1000px): Current room path layout (IMMUTABLE)
-RIGHT HALF (1000-2000px): Next room path layout (IMMUTABLE)
-These path coordinates are SACRED. Preserve EXACT layout while applying the artistic styles above.
-Yellow = walkable paths. Black = obstacles/decoration. DO NOT reshape paths, ONLY stylize them.`;
+CRITICAL COMPOSITION RULES FOR PANORAMA:
+1. The reference is a 2000x800 LAYOUT MASK with YELLOW PATHS on BLACK background (not literal colors).
+2. FILL THE ENTIRE 2000x800 CANVAS with scene content. NO black voids, NO empty space.
+3. LEFT HALF (0-1000px): Current room - preserve its path layout exactly
+4. RIGHT HALF (1000-2000px): Next room - preserve its path layout exactly
+5. Yellow areas = walkable paths (style appropriately: dirt, stone, grass, concrete, field lines, etc.)
+6. Black areas = NON-WALKABLE zones (FILL with environment: obstacles, decoration, buildings, trees, rocks, walls, crowd stands, etc.)
+7. Paths MUST flow from left edge through center to right edge - this is SACRED geometry.
+8. DO NOT leave any black background showing. Use all 2000x800 pixels with rich environmental details.
+9. Blend the artistic styles smoothly at the 1000px midpoint for visual continuity.`;
 
     // Generate 2000x800 panorama with combined tile map reference
     console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with PURE PATH MASK)' : ''}...`);

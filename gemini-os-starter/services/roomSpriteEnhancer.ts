@@ -28,15 +28,20 @@ export async function enhanceRoomWithSprites(
     return room;
   }
 
+  console.log(`[RoomSpriteEnhancer] 🎨 Starting sprite enhancement for ${room.id} with ${room.objects.length} objects`);
+  console.log(`[RoomSpriteEnhancer] Biome: ${biome}, Story context: ${storyContext ? 'Yes' : 'No'}`);
+
   const enhancedObjects: GameObject[] = [];
   const extractedRoomNumber = roomNumber ?? parseInt(room.id.split('_')[1] || '0');
 
   for (const obj of room.objects) {
     if (obj.spriteUrl) {
+      console.log(`[RoomSpriteEnhancer] ✓ ${obj.type} ${obj.id} already has sprite, skipping`);
       enhancedObjects.push(obj);
       continue;
     }
 
+    console.log(`[RoomSpriteEnhancer] 🖼️ Generating sprite for ${obj.type} ${obj.id} (emoji: ${obj.sprite})...`);
     const enhancedObj = { ...obj };
 
     try {
@@ -57,6 +62,7 @@ export async function enhanceRoomWithSprites(
           storyContext || undefined
         );
         enhancedObj.spriteUrl = sprite.url || undefined;
+        console.log(`[RoomSpriteEnhancer] ✅ Enemy sprite generated: ${sprite.url?.substring(0, 60)}...`);
       } else if (obj.type === 'npc') {
         // Generate story-aware NPC description
         const npcDescription = await generateNPCDescription(
@@ -72,6 +78,7 @@ export async function enhanceRoomWithSprites(
           storyContext || undefined
         );
         enhancedObj.spriteUrl = sprite.url || undefined;
+        console.log(`[RoomSpriteEnhancer] ✅ NPC sprite generated: ${sprite.url?.substring(0, 60)}...`);
       } else if (obj.type === 'item') {
         const itemDescription = 'treasure, collectible';
         const sprite = await generateItemSprite(
@@ -81,9 +88,11 @@ export async function enhanceRoomWithSprites(
           biome
         );
         enhancedObj.spriteUrl = sprite.url || undefined;
+        console.log(`[RoomSpriteEnhancer] ✅ Item sprite generated: ${sprite.url?.substring(0, 60)}...`);
       }
     } catch (error) {
-      console.error(`[RoomSpriteEnhancer] Failed to generate sprite for ${obj.type}:`, error);
+      console.error(`[RoomSpriteEnhancer] ❌ Failed to generate sprite for ${obj.type} ${obj.id}:`, error);
+      console.error(`[RoomSpriteEnhancer] 🔄 Object will use emoji fallback: ${obj.sprite}`);
     }
 
     enhancedObjects.push(enhancedObj);
@@ -93,9 +102,22 @@ export async function enhanceRoomWithSprites(
     .map(obj => obj.spriteUrl)
     .filter((url): url is string => Boolean(url));
 
-  console.log(`[RoomSpriteEnhancer] Preloading ${spriteUrls.length} sprites...`);
-  await Promise.allSettled(spriteUrls.map(url => preloadSpriteImage(url)));
-  console.log('[RoomSpriteEnhancer] All sprites preloaded');
+  const totalObjects = room.objects.length;
+  const successCount = spriteUrls.length;
+  const failureCount = totalObjects - successCount;
+
+  console.log(`[RoomSpriteEnhancer] 📊 Sprite generation summary:`);
+  console.log(`  - Total objects: ${totalObjects}`);
+  console.log(`  - Sprites generated: ${successCount}`);
+  console.log(`  - Using emoji fallback: ${failureCount}`);
+
+  if (spriteUrls.length > 0) {
+    console.log(`[RoomSpriteEnhancer] 📥 Preloading ${spriteUrls.length} sprites...`);
+    await Promise.allSettled(spriteUrls.map(url => preloadSpriteImage(url)));
+    console.log('[RoomSpriteEnhancer] ✅ All sprites preloaded and ready to display');
+  } else {
+    console.warn('[RoomSpriteEnhancer] ⚠️ No sprites generated - all objects will use emoji fallbacks');
+  }
 
   return {
     ...room,

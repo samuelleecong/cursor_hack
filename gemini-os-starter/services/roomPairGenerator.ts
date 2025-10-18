@@ -6,6 +6,7 @@
 import { Room, StoryMode } from '../types';
 import { generateRoom } from './roomGenerator';
 import { generateScenePanorama } from './sceneImageGenerator';
+import { enhanceRoomWithSprites } from './roomSpriteEnhancer';
 
 /**
  * Generate a pair of rooms (current + next) with panoramic scene generation
@@ -89,9 +90,17 @@ export async function generateRoomPair(
     console.log(`[RoomPairGen] Current room scene attached: ${currentScene.substring(0, 50)}...`);
     console.log(`[RoomPairGen] Next room scene attached: ${nextScene.substring(0, 50)}...`);
 
+    // CRITICAL: Enhance rooms with sprite generation
+    console.log(`[RoomPairGen] Enhancing rooms with object sprites...`);
+    const [enhancedCurrentRoom, enhancedNextRoom] = await Promise.all([
+      enhanceRoomWithSprites(currentRoomBase, currentBiomeKey, storyContext, currentRoomNumber, storyMode),
+      enhanceRoomWithSprites(nextRoomBase, nextBiomeKey, storyContext, nextRoomNumber, storyMode),
+    ]);
+    console.log(`[RoomPairGen] Room pair sprite enhancement complete!`);
+
     return {
-      currentRoom: currentRoomBase,
-      nextRoom: nextRoomBase,
+      currentRoom: enhancedCurrentRoom,
+      nextRoom: enhancedNextRoom,
     };
   } catch (error) {
     console.error(`[RoomPairGen] Failed to generate panorama scenes:`, error);
