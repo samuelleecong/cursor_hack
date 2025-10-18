@@ -769,14 +769,14 @@ const App: React.FC = () => {
   const currentRoom = gameState.rooms.get(gameState.currentRoomId);
 
   return (
-    <div className="bg-gray-900 w-screen h-screen overflow-hidden">
+    <div className="w-screen h-screen overflow-hidden" style={{backgroundColor: '#2d5a4e'}}>
       <AnimationOverlay
         animation={gameState.currentAnimation}
         onComplete={handleAnimationComplete}
       />
       <AudioManager gameState={gameState} />
       <Window title="Roguelike Adventure">
-        <div className="w-full h-full" style={{backgroundColor: '#1a1a2e'}}>
+        <div className="w-full h-full" style={{backgroundColor: '#2d5a4e'}}>
           {showStoryInput ? (
             <StoryInput onSubmit={handleStorySubmit} />
           ) : isGeneratingClasses ? (
@@ -787,24 +787,89 @@ const App: React.FC = () => {
               onSelectCharacter={handleCharacterSelect}
             />
           ) : !gameState.isAlive ? (
-            <div className="flex flex-col items-center justify-center h-full p-8 bg-gradient-to-b from-red-900 to-black">
-              <div className="text-8xl mb-6">💀</div>
-              <h1 className="text-5xl font-bold text-red-400 mb-4">
-                Game Over
-              </h1>
-              <p className="text-xl text-gray-300 mb-8 text-center max-w-md">
-                Your journey has come to an end. But every death brings a new
-                story...
-              </p>
-              <button
-                onClick={handleRestart}
-                className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-bold text-lg rounded-lg transition-all duration-200 transform hover:scale-105"
-              >
-                Begin a New Adventure
-              </button>
+            <div
+              className="flex flex-col items-center justify-center h-full p-8"
+              style={{
+                backgroundColor: '#2d5a4e',
+                backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
+                fontFamily: 'monospace'
+              }}
+            >
+              <div className="max-w-2xl w-full">
+                {/* Title Box */}
+                <div
+                  className="mb-8 p-10 text-center relative"
+                  style={{
+                    backgroundColor: '#3d2817',
+                    border: '8px solid #5c3d2e',
+                    boxShadow: '0 12px 0 #1a1410, inset 0 6px 0 rgba(255,255,255,0.1)',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <div style={{ position: 'absolute', top: '10px', left: '10px', width: '20px', height: '20px', borderTop: '4px solid #c9534f', borderLeft: '4px solid #c9534f' }}></div>
+                  <div style={{ position: 'absolute', top: '10px', right: '10px', width: '20px', height: '20px', borderTop: '4px solid #c9534f', borderRight: '4px solid #c9534f' }}></div>
+                  <div style={{ position: 'absolute', bottom: '10px', left: '10px', width: '20px', height: '20px', borderBottom: '4px solid #c9534f', borderLeft: '4px solid #c9534f' }}></div>
+                  <div style={{ position: 'absolute', bottom: '10px', right: '10px', width: '20px', height: '20px', borderBottom: '4px solid #c9534f', borderRight: '4px solid #c9534f' }}></div>
+
+                  <div className="text-8xl mb-6 animate-pulse">💀</div>
+                  <h1
+                    style={{
+                      color: '#c9534f',
+                      textShadow: '4px 4px 0px #8b3a34',
+                      letterSpacing: '4px',
+                      fontSize: '48px',
+                      fontWeight: 'bold',
+                      marginBottom: '12px'
+                    }}
+                  >
+                    GAME OVER
+                  </h1>
+                  <div className="flex items-center justify-center gap-3">
+                    <div style={{ width: '60px', height: '4px', backgroundColor: '#c9534f', borderRadius: '2px' }}></div>
+                    <span style={{ color: '#c9534f', fontSize: '18px' }}>☠</span>
+                    <div style={{ width: '60px', height: '4px', backgroundColor: '#c9534f', borderRadius: '2px' }}></div>
+                  </div>
+                </div>
+
+                {/* Message Box */}
+                <div
+                  className="mb-8 p-6 text-center"
+                  style={{
+                    backgroundColor: '#c9b896',
+                    border: '6px solid #8b6f47',
+                    boxShadow: 'inset 0 4px 0 #e8d4b0',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <p style={{ color: '#3d2817', fontSize: '16px', lineHeight: '1.8', fontWeight: '500' }}>
+                    Your journey has come to an end.<br/>
+                    But every death brings a new story...
+                  </p>
+                </div>
+
+                {/* Restart Button */}
+                <button
+                  onClick={handleRestart}
+                  className="w-full py-6 transition-all active:translate-y-2"
+                  style={{
+                    backgroundColor: '#c9534f',
+                    border: '6px solid #8b3a34',
+                    borderRadius: '6px',
+                    boxShadow: '0 10px 0 #8b3a34',
+                    color: '#f4e8d0',
+                    fontSize: '20px',
+                    fontWeight: 'bold',
+                    letterSpacing: '3px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⚔ BEGIN A NEW ADVENTURE ⚔
+                </button>
+              </div>
             </div>
           ) : (
-            <>
+            <div className="flex h-full">
+              {/* Sidebar HUD */}
               {gameState.selectedCharacter && (
                 <GameHUD
                   character={gameState.selectedCharacter}
@@ -818,7 +883,9 @@ const App: React.FC = () => {
                   roomCounter={gameState.roomCounter}
                 />
               )}
-              <div className="flex-1 overflow-hidden bg-gray-900 relative">
+
+              {/* Game Area */}
+              <div className="flex-1 overflow-hidden relative" style={{backgroundColor: '#1a1a1a'}}>
                 {currentRoom && gameState.selectedCharacter && (
                   <GameCanvas
                     character={gameState.selectedCharacter}
@@ -846,15 +913,53 @@ const App: React.FC = () => {
                 {showAIDialog && (
                   <div className="absolute inset-0 z-10">
                     {error ? (
-                      <div className="w-full h-full flex items-center justify-center bg-black/90">
-                        <div className="bg-red-900/80 p-8 rounded-lg border-4 border-red-500 max-w-lg">
-                          <h2 className="text-2xl font-bold text-red-200 mb-4">Error</h2>
-                          <p className="text-red-100 mb-4">{error}</p>
+                      <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{
+                          backgroundColor: 'rgba(61,40,23,0.95)',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        <div
+                          className="max-w-lg p-8"
+                          style={{
+                            backgroundColor: '#f4e8d0',
+                            border: '6px solid #c9534f',
+                            borderRadius: '4px',
+                            boxShadow: '0 8px 0 #8b3a34, inset 0 4px 0 #fff9e8'
+                          }}
+                        >
+                          <h2
+                            className="mb-4"
+                            style={{
+                              fontSize: '28px',
+                              fontWeight: 'bold',
+                              color: '#c9534f',
+                              letterSpacing: '2px',
+                              textShadow: '2px 2px 0px #8b3a34'
+                            }}
+                          >
+                            ⚠ ERROR ⚠
+                          </h2>
+                          <p style={{ color: '#3d2817', fontSize: '14px', marginBottom: '20px', lineHeight: '1.6' }}>
+                            {error}
+                          </p>
                           <button
                             onClick={handleCloseAIDialog}
-                            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg"
+                            className="w-full py-4 transition-all active:translate-y-2"
+                            style={{
+                              backgroundColor: '#c9534f',
+                              border: '4px solid #8b3a34',
+                              borderRadius: '4px',
+                              boxShadow: '0 6px 0 #8b3a34',
+                              color: '#f4e8d0',
+                              fontSize: '14px',
+                              fontWeight: 'bold',
+                              letterSpacing: '2px',
+                              cursor: 'pointer'
+                            }}
                           >
-                            Close
+                            CLOSE
                           </button>
                         </div>
                       </div>
@@ -869,7 +974,7 @@ const App: React.FC = () => {
                   </div>
                 )}
               </div>
-            </>
+            </div>
           )}
         </div>
       </Window>

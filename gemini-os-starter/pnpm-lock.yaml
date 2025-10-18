@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fal-ai/client':
+        specifier: ^1.7.0
+        version: 1.7.0
       '@fal-ai/serverless-client':
         specifier: ^0.15.0
         version: 0.15.0
@@ -277,6 +280,10 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fal-ai/client@1.7.0':
+    resolution: {integrity: sha512-lZ1KuLc4iqBalIqwlQGJLBD2pfAmWQqM8pvT2clqhU8FjPrZxLBNnAWiQsaB3b7GXzItSA1C6k5W8TfUJPT5eA==}
+    engines: {node: '>=18.0.0'}
 
   '@fal-ai/serverless-client@0.15.0':
     resolution: {integrity: sha512-4Vuocu0342OijAN6xO/lwohDV7h90LbkTnOAEwH+pYvMFVC6RYmHS4GILc/wnOWBTw+iFlZFEKlljEVolkjVfg==}
@@ -924,6 +931,12 @@ snapshots:
 
   '@esbuild/win32-x64@0.25.11':
     optional: true
+
+  '@fal-ai/client@1.7.0':
+    dependencies:
+      '@msgpack/msgpack': 3.1.2
+      eventsource-parser: 1.1.2
+      robot3: 0.4.1
 
   '@fal-ai/serverless-client@0.15.0':
     dependencies:
