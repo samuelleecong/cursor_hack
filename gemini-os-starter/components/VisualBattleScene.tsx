@@ -175,18 +175,31 @@ export const VisualBattleScene: React.FC<VisualBattleSceneProps> = ({
   }, [isLoading, sceneData]);
 
   // Determine loading stage
-  if ((showLoadingScreen || generatingImages || (!sceneData && !isLoading)) && !sceneData) {
-    let stage: 'processing' | 'generating' | 'creating_art' = 'generating';
+  // Show loading screen whenever sceneData is not available
+  if (!sceneData) {
+    let stage: 'processing' | 'generating' | 'creating_art' = 'processing';
 
     if (generatingImages) {
       stage = 'creating_art';
-    } else if (showLoadingScreen) {
+    } else if (showLoadingScreen || isLoading) {
       stage = 'generating';
-    } else if (!sceneData) {
-      stage = 'processing';
     }
 
+    console.log('[VisualBattleScene] Showing loading screen, stage:', stage, 'isLoading:', isLoading, 'generatingImages:', generatingImages);
     return <SceneGenerationLoading stage={stage} />;
+  }
+
+  // Validate scene data before rendering
+  if (!sceneData.scene || !sceneData.choices) {
+    console.error('[VisualBattleScene] Invalid sceneData:', sceneData);
+    return (
+      <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1a1a1a' }}>
+        <div className="text-center p-8">
+          <p className="text-red-500 text-xl mb-4">⚠️ Failed to load scene</p>
+          <p className="text-gray-400">Please try interacting again</p>
+        </div>
+      </div>
+    );
   }
 
   return (

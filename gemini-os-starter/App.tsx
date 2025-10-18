@@ -186,6 +186,109 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Helper function to trigger pre-generation of next 2 rooms
+  // Defined before handleCharacterSelect to avoid temporal dead zone
+  const triggerRoomPairPreGeneration = useCallback((
+    currentRoomCounter: number,
+    currentRoomDescription?: string
+  ) => {
+    const nextRoomCounter = currentRoomCounter + 1;
+    const nextNextRoomCounter = currentRoomCounter + 2;
+    const nextRoomId = `room_${nextRoomCounter}`;
+    const nextNextRoomId = `room_${nextNextRoomCounter}`;
+
+    // Check if these rooms are already being generated or exist
+    const roomsAlreadyExist = gameState.rooms.has(nextRoomId) && gameState.rooms.has(nextNextRoomId);
+    const roomsBeingGenerated = generatingRooms.has(nextRoomId) || generatingRooms.has(nextNextRoomId);
+
+    if (!roomsAlreadyExist && !roomsBeingGenerated) {
+      console.log(`[App] Pre-generating room pair ${nextRoomId} + ${nextNextRoomId}...`);
+
+      // Mark both rooms as being generated
+      generatingRooms.add(nextRoomId);
+      generatingRooms.add(nextNextRoomId);
+
+      const nextBiomeKey = gameState.biomeProgression[nextRoomCounter] || 'forest';
+      const nextNextBiomeKey = gameState.biomeProgression[nextNextRoomCounter] || 'forest';
+
+      // Create the main generation promise
+      const pairGenerationPromise = generateRoomPair(
+        nextRoomId,
+        nextNextRoomId,
+        gameState.storySeed,
+        nextRoomCounter,
+        nextNextRoomCounter,
+        nextBiomeKey,
+        nextNextBiomeKey,
+        gameState.storyContext,
+        gameState.storyMode,
+        currentRoomDescription
+      );
+
+      // Store individual room promises (they resolve when the pair is generated)
+      const nextRoomPromise = pairGenerationPromise.then(({ currentRoom }) => currentRoom);
+      const nextNextRoomPromise = pairGenerationPromise.then(({ nextRoom }) => nextRoom);
+
+      roomGenerationPromises.set(nextRoomId, nextRoomPromise);
+      roomGenerationPromises.set(nextNextRoomId, nextNextRoomPromise);
+
+      // Handle completion - enhance rooms with sprites before saving
+      pairGenerationPromise.then(async ({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
+        console.log(`[App] Room pair generated, enhancing with sprites...`);
+
+        // Enhance both rooms with AI-generated sprites
+        const enhancedNextRoom = await enhanceRoomWithSprites(
+          nextRoom,
+          nextBiomeKey,
+          gameState.storyContext,
+          nextRoomCounter,
+          gameState.storyMode
+        );
+
+        const enhancedNextNextRoom = await enhanceRoomWithSprites(
+          nextNextRoom,
+          nextNextBiomeKey,
+          gameState.storyContext,
+          nextNextRoomCounter,
+          gameState.storyMode
+        );
+
+        console.log(`[App] Sprites generated for pre-generated rooms`);
+
+        // Save ENHANCED rooms to cache
+        roomCache.saveRoom(enhancedNextRoom);
+        roomCache.saveRoom(enhancedNextNextRoom);
+
+        // Save ENHANCED rooms to state
+        setGameState((prev) => {
+          const newRooms = new Map(prev.rooms);
+          newRooms.set(nextRoomId, enhancedNextRoom);
+          newRooms.set(nextNextRoomId, enhancedNextNextRoom);
+          return { ...prev, rooms: newRooms };
+        });
+        console.log(`[App] Room pair ${nextRoomId} + ${nextNextRoomId} pre-generated successfully with sprites`);
+
+        // Remove from tracking sets
+        generatingRooms.delete(nextRoomId);
+        generatingRooms.delete(nextNextRoomId);
+        roomGenerationPromises.delete(nextRoomId);
+        roomGenerationPromises.delete(nextNextRoomId);
+      }).catch((error) => {
+        console.error(`[App] Failed to pre-generate room pair:`, error);
+
+        // Remove from tracking sets on error too
+        generatingRooms.delete(nextRoomId);
+        generatingRooms.delete(nextNextRoomId);
+        roomGenerationPromises.delete(nextRoomId);
+        roomGenerationPromises.delete(nextNextRoomId);
+      });
+    } else if (roomsAlreadyExist) {
+      console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already exist, skipping pre-generation`);
+    } else {
+      console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already being generated, skipping duplicate call`);
+    }
+  }, [gameState.rooms, gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression]);
+
   const handleCharacterSelect = useCallback(async (character: CharacterClass) => {
     try {
       // Immediately show loading state
@@ -229,22 +332,31 @@ const App: React.FC = () => {
       console.log('[App] Room pair generated, room0 has scene:', !!room0.sceneImage);
       console.log('[App] Room pair generated, room1 has scene:', !!room1.sceneImage);
 
+      setRoomGenerationProgress(40);
+      setRoomGenerationStep('Generating sprites for NPCs and enemies...');
+
+      // Enhance both rooms with AI-generated sprites
+      const enhancedRoom0 = await enhanceRoomWithSprites(room0, biomeKey0, gameState.storyContext, 0, gameState.storyMode);
+      const enhancedRoom1 = await enhanceRoomWithSprites(room1, biomeKey1, gameState.storyContext, 1, gameState.storyMode);
+
+      console.log('[App] Sprites generated for initial rooms');
+
       const rooms = new Map<string, Room>();
-      rooms.set('room_0', room0);
-      rooms.set('room_1', room1);
+      rooms.set('room_0', enhancedRoom0);
+      rooms.set('room_1', enhancedRoom1);
 
-      setRoomGenerationProgress(60);
-      setRoomGenerationStep('Generating sprites...');
+      setRoomGenerationProgress(80);
+      setRoomGenerationStep('Saving to cache...');
 
-      // Save rooms to cache
-      roomCache.saveRoom(room0);
-      roomCache.saveRoom(room1);
+      // Save enhanced rooms to cache
+      roomCache.saveRoom(enhancedRoom0);
+      roomCache.saveRoom(enhancedRoom1);
 
       setRoomGenerationProgress(90);
-      setRoomGenerationStep('Building environment...');
+      setRoomGenerationStep('Finalizing world...');
 
       // Set player spawn position from tile map
-      const spawnPosition = room0.tileMap?.spawnPoint || {x: 400, y: 300};
+      const spawnPosition = enhancedRoom0.tileMap?.spawnPoint || {x: 400, y: 300};
 
       // Log initial room entry
       eventLogger.logEvent(
@@ -278,6 +390,12 @@ const App: React.FC = () => {
 
       setRoomGenerationProgress(100);
       console.log('[App] Initial room pair (0 + 1) generated successfully, game starting!');
+
+      // Immediately start pre-generating rooms 2 & 3 in the background
+      // This ensures they're ready when player reaches room 1
+      setTimeout(() => {
+        triggerRoomPairPreGeneration(0, enhancedRoom0.description);
+      }, 100); // Small delay to ensure state is updated
     } catch (error) {
       console.error('[App] Failed to generate initial rooms:', error);
       setError('Failed to generate initial rooms. Please try again.');
@@ -285,7 +403,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       setIsStartingGame(false);
     }
-  }, [gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression]);
+  }, [gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression, triggerRoomPairPreGeneration]);
 
   // Handle player movement
   const handlePlayerMove = useCallback((newPosition: Position) => {
@@ -318,7 +436,14 @@ const App: React.FC = () => {
           try {
             // Wait for the ongoing generation to complete
             newRoom = await generationPromise;
-            console.log(`[App] Room ${newRoomId} generation completed, using pre-generated room`);
+            console.log(`[App] Room ${newRoomId} generation completed, enhancing with sprites...`);
+
+            setRoomGenerationProgress(50);
+            setRoomGenerationStep('Generating sprites...');
+
+            // Enhance the pre-generated room with sprites
+            newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext, newRoomCounter, gameState.storyMode);
+
             setRoomGenerationProgress(70);
           } catch (error) {
             console.error(`[App] Pre-generation failed for ${newRoomId}, falling back to room generation:`, error);
@@ -374,6 +499,20 @@ const App: React.FC = () => {
         roomCache.saveRoom(newRoom);
       } else {
         console.log(`[App] Room ${newRoomId} found in cache or memory`);
+        setRoomGenerationProgress(50);
+
+        // Safety check: ensure room has sprites
+        if (newRoom.objects.some(obj => !obj.spriteUrl)) {
+          console.log(`[App] Room ${newRoomId} needs sprite enhancement`);
+          setRoomGenerationStep('Enhancing sprites...');
+
+          newRoom = await enhanceRoomWithSprites(newRoom, biomeKey, gameState.storyContext, newRoomCounter, gameState.storyMode);
+
+          // Update cache with enhanced version
+          roomCache.saveRoom(newRoom);
+          console.log(`[App] Room ${newRoomId} sprites enhanced and cached`);
+        }
+
         setRoomGenerationProgress(70);
       }
 
@@ -444,82 +583,10 @@ const App: React.FC = () => {
 
       setRoomGenerationProgress(100);
 
-      // Pre-generate next room pair (N+1 and N+2) in the background with panorama
-      const nextRoomCounter = newRoomCounter + 1;
-      const nextNextRoomCounter = newRoomCounter + 2;
-      const nextRoomId = `room_${nextRoomCounter}`;
-      const nextNextRoomId = `room_${nextNextRoomCounter}`;
-
-      // Check if these rooms are already being generated or exist
-      const roomsAlreadyExist = gameState.rooms.has(nextRoomId) && gameState.rooms.has(nextNextRoomId);
-      const roomsBeingGenerated = generatingRooms.has(nextRoomId) || generatingRooms.has(nextNextRoomId);
-
-      if (!roomsAlreadyExist && !roomsBeingGenerated) {
-        console.log(`[App] Pre-generating room pair ${nextRoomId} + ${nextNextRoomId}...`);
-
-        // Mark both rooms as being generated
-        generatingRooms.add(nextRoomId);
-        generatingRooms.add(nextNextRoomId);
-
-        const nextBiomeKey = gameState.biomeProgression[nextRoomCounter] || 'forest';
-        const nextNextBiomeKey = gameState.biomeProgression[nextNextRoomCounter] || 'forest';
-
-        // Create the main generation promise
-        const pairGenerationPromise = generateRoomPair(
-          nextRoomId,
-          nextNextRoomId,
-          gameState.storySeed,
-          nextRoomCounter,
-          nextNextRoomCounter,
-          nextBiomeKey,
-          nextNextBiomeKey,
-          gameState.storyContext,
-          gameState.storyMode,
-          newRoom?.description
-        );
-
-        // Store individual room promises (they resolve when the pair is generated)
-        const nextRoomPromise = pairGenerationPromise.then(({ currentRoom }) => currentRoom);
-        const nextNextRoomPromise = pairGenerationPromise.then(({ nextRoom }) => nextRoom);
-
-        roomGenerationPromises.set(nextRoomId, nextRoomPromise);
-        roomGenerationPromises.set(nextNextRoomId, nextNextRoomPromise);
-
-        // Handle completion
-        pairGenerationPromise.then(({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
-          // Save to cache
-          roomCache.saveRoom(nextRoom);
-          roomCache.saveRoom(nextNextRoom);
-
-          setGameState((prev) => {
-            const newRooms = new Map(prev.rooms);
-            newRooms.set(nextRoomId, nextRoom);
-            newRooms.set(nextNextRoomId, nextNextRoom);
-            return { ...prev, rooms: newRooms };
-          });
-          console.log(`[App] Room pair ${nextRoomId} + ${nextNextRoomId} pre-generated successfully`);
-
-          // Remove from tracking sets
-          generatingRooms.delete(nextRoomId);
-          generatingRooms.delete(nextNextRoomId);
-          roomGenerationPromises.delete(nextRoomId);
-          roomGenerationPromises.delete(nextNextRoomId);
-        }).catch((error) => {
-          console.error(`[App] Failed to pre-generate room pair:`, error);
-
-          // Remove from tracking sets on error too
-          generatingRooms.delete(nextRoomId);
-          generatingRooms.delete(nextNextRoomId);
-          roomGenerationPromises.delete(nextRoomId);
-          roomGenerationPromises.delete(nextNextRoomId);
-        });
-      } else if (roomsAlreadyExist) {
-        console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already exist, skipping pre-generation`);
-      } else {
-        console.log(`[App] Rooms ${nextRoomId} + ${nextNextRoomId} already being generated, skipping duplicate call`);
-      }
+      // Pre-generate next room pair (N+1 and N+2) in the background
+      triggerRoomPairPreGeneration(newRoomCounter, newRoom?.description);
     },
-    [gameState.roomCounter, gameState.rooms, gameState.currentRoomId, gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression, gameState.level, gameState.currentHP],
+    [gameState.roomCounter, gameState.rooms, gameState.currentRoomId, gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression, gameState.level, gameState.currentHP, triggerRoomPairPreGeneration],
   );
 
   // Handle adding experience and leveling up
@@ -728,7 +795,7 @@ const App: React.FC = () => {
       setError(null);
       setShowAIDialog(true);
       setIsLoading(true);
-      setSceneData(null);
+      setSceneData(null); // Clear scene data to trigger loading screen
 
       internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
     },

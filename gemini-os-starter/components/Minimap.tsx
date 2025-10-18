@@ -69,9 +69,7 @@ export const Minimap: React.FC<MinimapProps> = ({ dungeonGrid, currentPosition, 
               return null;
             }
 
-            const fillColor = isCurrent
-              ? '#fbbf24' // Yellow for current position
-              : getRoomTypeColor(cell.roomType, isVisited);
+            const fillColor = getRoomTypeColor(cell.roomType, isVisited);
 
             return (
               <g key={`${x}-${y}`}>
@@ -82,8 +80,8 @@ export const Minimap: React.FC<MinimapProps> = ({ dungeonGrid, currentPosition, 
                   width={cellSize}
                   height={cellSize}
                   fill={fillColor}
-                  stroke="#374151"
-                  strokeWidth="1"
+                  stroke={isCurrent ? '#000000' : '#374151'}
+                  strokeWidth={isCurrent ? '3' : '1'}
                 />
 
                 {/* Current position indicator */}
@@ -172,7 +170,7 @@ export const Minimap: React.FC<MinimapProps> = ({ dungeonGrid, currentPosition, 
       {/* Legend */}
       <div className="mt-3 text-xs space-y-1">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-yellow-400 rounded"></div>
+          <div className="w-3 h-3 bg-gray-700 rounded border-2 border-black"></div>
           <span className="text-gray-300">Current</span>
         </div>
         <div className="flex items-center gap-2">
