@@ -174,112 +174,47 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
     return null;
   }
 
+  // Export music state and controls for use in other components
+  (window as any).__gameMusicState = {
+    musicEnabled,
+    volume,
+    isPlaying,
+    isLoading,
+    currentTrack,
+    error,
+    toggleMusic,
+    handleVolumeChange,
+  };
+
   return (
     <>
       {/* Autoplay blocked banner */}
       {error && error.includes('autoplay') && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
-          <div className="bg-purple-900/95 backdrop-blur border-2 border-purple-400 rounded-lg px-6 py-3 shadow-2xl">
+        <div
+          className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50"
+          style={{
+            fontFamily: 'monospace',
+            animation: 'bounce 1s infinite'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#f4e8d0',
+              border: '4px solid #3d2817',
+              borderRadius: '4px',
+              padding: '12px 20px',
+              boxShadow: '0 6px 0 #3d2817, inset 0 3px 0 #fff9e8'
+            }}
+          >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🎵</span>
-              <div className="text-white font-semibold">
+              <span style={{ fontSize: '20px' }}>🎵</span>
+              <div style={{ color: '#3d2817', fontWeight: 'bold', fontSize: '12px' }}>
                 Click anywhere to start music!
               </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* Floating music controls */}
-      <div className="fixed bottom-4 right-4 z-50">
-        <div className="relative">
-          {/* Main control button */}
-          <button
-            onClick={() => setShowControls(!showControls)}
-            className={`p-3 rounded-full shadow-lg transition-all ${
-              musicEnabled
-                ? 'bg-purple-600 hover:bg-purple-700'
-                : 'bg-gray-700 hover:bg-gray-600'
-            } ${isLoading ? 'animate-pulse' : ''}`}
-            title={musicEnabled ? 'Music On' : 'Music Off'}
-          >
-            {isLoading ? (
-              <span className="text-white text-xl">⏳</span>
-            ) : musicEnabled ? (
-              <span className="text-white text-xl">{isPlaying ? '🎵' : '🔇'}</span>
-            ) : (
-              <span className="text-white text-xl">🔇</span>
-            )}
-          </button>
-
-          {/* Expanded controls */}
-          {showControls && (
-            <div className="absolute bottom-full right-0 mb-2 bg-gray-900/95 backdrop-blur rounded-lg p-4 shadow-2xl border-2 border-purple-500 min-w-[250px]">
-              <h3 className="text-purple-300 font-bold mb-3 text-sm">Music Controls</h3>
-
-              {/* Enable/Disable */}
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-gray-300 text-sm">Music</span>
-                <button
-                  onClick={toggleMusic}
-                  className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
-                    musicEnabled
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                  }`}
-                >
-                  {musicEnabled ? 'ON' : 'OFF'}
-                </button>
-              </div>
-
-              {/* Volume slider */}
-              {musicEnabled && (
-                <div className="mb-3">
-                  <label className="text-gray-300 text-xs mb-1 block">
-                    Volume: {Math.round(volume * 100)}%
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={volume}
-                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                    className="w-full accent-purple-600"
-                  />
-                </div>
-              )}
-
-              {/* Current track info */}
-              {currentTrack && musicEnabled && (
-                <div className="border-t border-gray-700 pt-3 mt-3">
-                  <div className="text-xs text-gray-400 mb-1">Now Playing:</div>
-                  <div className="text-xs text-purple-300 truncate" title={currentTrack.prompt}>
-                    {currentTrack.prompt.slice(0, 60)}...
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Model: {currentTrack.model}
-                  </div>
-                </div>
-              )}
-
-              {/* Error display */}
-              {error && (
-                <div className="bg-red-900/50 border border-red-500 rounded p-2 mt-3">
-                  <div className="text-xs text-red-200">{error}</div>
-                </div>
-              )}
-
-              {/* Loading indicator */}
-              {isLoading && (
-                <div className="bg-blue-900/50 border border-blue-500 rounded p-2 mt-3">
-                  <div className="text-xs text-blue-200">Generating music...</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
     </>
   );
 };
