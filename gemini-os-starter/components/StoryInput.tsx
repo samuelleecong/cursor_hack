@@ -13,159 +13,377 @@ interface StoryInputProps {
 export const StoryInput: React.FC<StoryInputProps> = ({ onSubmit }) => {
   const [storyText, setStoryText] = useState('');
   const [selectedMode, setSelectedMode] = useState<StoryMode>('inspiration');
+  const [showModeSelect, setShowModeSelect] = useState(false);
+
+  const handleNext = () => {
+    if (storyText.trim()) {
+      setShowModeSelect(true);
+    }
+  };
+
+  const handleBack = () => {
+    setShowModeSelect(false);
+  };
 
   const handleSubmit = () => {
-    if (storyText.trim()) {
-      onSubmit(storyText.trim(), selectedMode);
-    }
+    onSubmit(storyText.trim(), selectedMode);
   };
 
   const handleSkip = () => {
     onSubmit(null, 'inspiration');
   };
 
+  // Step 2: Mode Selection Screen
+  if (showModeSelect) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center min-h-full p-6"
+        style={{
+          backgroundColor: '#2d5a4e',
+          backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
+          fontFamily: 'monospace'
+        }}
+      >
+        <div className="max-w-4xl w-full">
+          {/* Title */}
+          <div
+            className="mb-6 p-8 text-center relative"
+            style={{
+              backgroundColor: '#f4e8d0',
+              border: '8px solid #3d2817',
+              boxShadow: '0 10px 0 #3d2817, inset 0 6px 0 #fff9e8',
+              borderRadius: '4px'
+            }}
+          >
+            <div style={{ position: 'absolute', top: '10px', left: '10px', width: '20px', height: '20px', borderTop: '4px solid #8b6f47', borderLeft: '4px solid #8b6f47' }}></div>
+            <div style={{ position: 'absolute', top: '10px', right: '10px', width: '20px', height: '20px', borderTop: '4px solid #8b6f47', borderRight: '4px solid #8b6f47' }}></div>
+            <div style={{ position: 'absolute', bottom: '10px', left: '10px', width: '20px', height: '20px', borderBottom: '4px solid #8b6f47', borderLeft: '4px solid #8b6f47' }}></div>
+            <div style={{ position: 'absolute', bottom: '10px', right: '10px', width: '20px', height: '20px', borderBottom: '4px solid #8b6f47', borderRight: '4px solid #8b6f47' }}></div>
+
+            <div style={{ fontSize: '14px', color: '#8b6f47', marginBottom: '8px' }}>✦ ✦ ✦</div>
+            <h1
+              style={{
+                color: '#5c3d2e',
+                textShadow: '4px 4px 0px #d4a574',
+                letterSpacing: '3px',
+                fontSize: '42px',
+                fontWeight: 'bold',
+                marginBottom: '8px'
+              }}
+            >
+              SELECT MODE
+            </h1>
+            <div className="flex items-center justify-center gap-3 mt-2">
+              <div style={{ width: '60px', height: '4px', backgroundColor: '#8b6f47', borderRadius: '2px' }}></div>
+              <span style={{ color: '#8b6f47', fontSize: '18px' }}>★</span>
+              <div style={{ width: '60px', height: '4px', backgroundColor: '#8b6f47', borderRadius: '2px' }}></div>
+            </div>
+          </div>
+
+          {/* Info */}
+          <div
+            className="mb-6 p-5"
+            style={{
+              backgroundColor: '#c9b896',
+              border: '5px solid #8b6f47',
+              boxShadow: 'inset 0 3px 0 #e8d4b0',
+              borderRadius: '4px'
+            }}
+          >
+            <p style={{ color: '#3d2817', fontSize: '14px', lineHeight: '1.8', textAlign: 'center', fontWeight: '500' }}>
+              ⚙️ Choose how the AI should use your story
+            </p>
+          </div>
+
+          {/* Mode Options */}
+          <div className="space-y-4 mb-6">
+            <button
+              onClick={() => setSelectedMode('recreation')}
+              className="w-full text-left p-6 transition-all"
+              style={{
+                backgroundColor: selectedMode === 'recreation' ? '#d4a574' : '#c9b896',
+                border: `5px solid ${selectedMode === 'recreation' ? '#8b6f47' : '#a89176'}`,
+                borderRadius: '6px',
+                boxShadow: selectedMode === 'recreation' ? 'inset 0 -4px 0 #b8915f, 0 0 0 4px #f4e8d0' : '0 4px 0 #a89176',
+                cursor: 'pointer'
+              }}
+            >
+              <div className="flex items-start gap-4">
+                <span style={{ color: '#5c3d2e', fontSize: '24px', fontWeight: 'bold', marginTop: '4px' }}>
+                  {selectedMode === 'recreation' ? '▶' : '▷'}
+                </span>
+                <div className="flex-1">
+                  <div style={{ color: '#3d2817', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>
+                    🎭 STORY RECREATION
+                  </div>
+                  <div style={{ color: '#5c3d2e', fontSize: '14px', lineHeight: '1.7' }}>
+                    Play through the actual story plot. Meet real characters, recreate key scenes.
+                    You can even play AS a character from the story!
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setSelectedMode('continuation')}
+              className="w-full text-left p-6 transition-all"
+              style={{
+                backgroundColor: selectedMode === 'continuation' ? '#d4a574' : '#c9b896',
+                border: `5px solid ${selectedMode === 'continuation' ? '#8b6f47' : '#a89176'}`,
+                borderRadius: '6px',
+                boxShadow: selectedMode === 'continuation' ? 'inset 0 -4px 0 #b8915f, 0 0 0 4px #f4e8d0' : '0 4px 0 #a89176',
+                cursor: 'pointer'
+              }}
+            >
+              <div className="flex items-start gap-4">
+                <span style={{ color: '#5c3d2e', fontSize: '24px', fontWeight: 'bold', marginTop: '4px' }}>
+                  {selectedMode === 'continuation' ? '▶' : '▷'}
+                </span>
+                <div className="flex-1">
+                  <div style={{ color: '#3d2817', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>
+                    📖 STORY CONTINUATION
+                  </div>
+                  <div style={{ color: '#5c3d2e', fontSize: '14px', lineHeight: '1.7' }}>
+                    Play after the story ends. References events and characters from canon.
+                    New adventures in an established world.
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setSelectedMode('inspiration')}
+              className="w-full text-left p-6 transition-all"
+              style={{
+                backgroundColor: selectedMode === 'inspiration' ? '#d4a574' : '#c9b896',
+                border: `5px solid ${selectedMode === 'inspiration' ? '#8b6f47' : '#a89176'}`,
+                borderRadius: '6px',
+                boxShadow: selectedMode === 'inspiration' ? 'inset 0 -4px 0 #b8915f, 0 0 0 4px #f4e8d0' : '0 4px 0 #a89176',
+                cursor: 'pointer'
+              }}
+            >
+              <div className="flex items-start gap-4">
+                <span style={{ color: '#5c3d2e', fontSize: '24px', fontWeight: 'bold', marginTop: '4px' }}>
+                  {selectedMode === 'inspiration' ? '▶' : '▷'}
+                </span>
+                <div className="flex-1">
+                  <div style={{ color: '#3d2817', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>
+                    ✨ THEMATIC INSPIRATION
+                  </div>
+                  <div style={{ color: '#5c3d2e', fontSize: '14px', lineHeight: '1.7' }}>
+                    Use the story's world, tone, and atmosphere. Creates original adventures
+                    that FEEL like the source material.
+                  </div>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-5">
+            <button
+              onClick={handleBack}
+              className="flex-1 py-5 transition-all active:translate-y-2"
+              style={{
+                backgroundColor: '#8b7355',
+                border: '5px solid #5c3d2e',
+                borderRadius: '6px',
+                boxShadow: '0 8px 0 #5c3d2e',
+                color: '#f4e8d0',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                letterSpacing: '2px',
+                cursor: 'pointer'
+              }}
+            >
+              ← BACK
+            </button>
+
+            <button
+              onClick={handleSubmit}
+              className="flex-1 py-5 transition-all active:translate-y-2"
+              style={{
+                backgroundColor: '#6fa85c',
+                border: '5px solid #4a7039',
+                borderRadius: '6px',
+                boxShadow: '0 8px 0 #4a7039',
+                color: '#f4e8d0',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                letterSpacing: '2px',
+                cursor: 'pointer'
+              }}
+            >
+              ⚔ START ⚔
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 1: Story Input Screen
   return (
-    <div className="flex flex-col items-center min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
-      <div className="max-w-2xl w-full bg-gray-900/90 backdrop-blur rounded-lg shadow-2xl p-8 border-2 border-purple-500 my-8">
-        <h1 className="text-4xl font-bold text-center mb-4 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-          Story-Based Game Mode
-        </h1>
+    <div
+      className="flex flex-col items-center justify-center min-h-full p-6"
+      style={{
+        backgroundColor: '#2d5a4e',
+        backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
+        fontFamily: 'monospace'
+      }}
+    >
+      <div className="max-w-4xl w-full">
+        {/* Main Title Box */}
+        <div
+          className="mb-6 p-8 text-center relative"
+          style={{
+            backgroundColor: '#f4e8d0',
+            border: '8px solid #3d2817',
+            boxShadow: '0 10px 0 #3d2817, inset 0 6px 0 #fff9e8',
+            borderRadius: '4px'
+          }}
+        >
+          {/* Corner decorations */}
+          <div style={{ position: 'absolute', top: '10px', left: '10px', width: '20px', height: '20px', borderTop: '4px solid #8b6f47', borderLeft: '4px solid #8b6f47' }}></div>
+          <div style={{ position: 'absolute', top: '10px', right: '10px', width: '20px', height: '20px', borderTop: '4px solid #8b6f47', borderRight: '4px solid #8b6f47' }}></div>
+          <div style={{ position: 'absolute', bottom: '10px', left: '10px', width: '20px', height: '20px', borderBottom: '4px solid #8b6f47', borderLeft: '4px solid #8b6f47' }}></div>
+          <div style={{ position: 'absolute', bottom: '10px', right: '10px', width: '20px', height: '20px', borderBottom: '4px solid #8b6f47', borderRight: '4px solid #8b6f47' }}></div>
 
-        <p className="text-gray-300 text-center mb-6">
-          Paste a story, book excerpt, or narrative below to generate a unique game world based on that text.
-          The AI will use your story as inspiration for encounters, characters, and atmosphere.
-        </p>
+          <div style={{ fontSize: '14px', color: '#8b6f47', marginBottom: '8px' }}>✦ ✦ ✦</div>
+          <h1
+            style={{
+              color: '#5c3d2e',
+              textShadow: '4px 4px 0px #d4a574',
+              letterSpacing: '3px',
+              fontSize: '42px',
+              fontWeight: 'bold',
+              marginBottom: '8px'
+            }}
+          >
+            STORY MODE
+          </h1>
+          <div className="flex items-center justify-center gap-3 mt-2">
+            <div style={{ width: '60px', height: '4px', backgroundColor: '#8b6f47', borderRadius: '2px' }}></div>
+            <span style={{ color: '#8b6f47', fontSize: '18px' }}>★</span>
+            <div style={{ width: '60px', height: '4px', backgroundColor: '#8b6f47', borderRadius: '2px' }}></div>
+          </div>
+        </div>
 
-        <div className="mb-6">
-          <label className="block text-purple-300 font-semibold mb-2">
-            Your Story (optional)
-          </label>
+        {/* Info Box */}
+        <div
+          className="mb-6 p-5"
+          style={{
+            backgroundColor: '#c9b896',
+            border: '5px solid #8b6f47',
+            boxShadow: 'inset 0 3px 0 #e8d4b0',
+            borderRadius: '4px'
+          }}
+        >
+          <p style={{ color: '#3d2817', fontSize: '14px', lineHeight: '1.8', textAlign: 'center', fontWeight: '500' }}>
+            📖 Enter a story to shape your adventure!<br/>
+            The AI will create a world based on your tale.
+          </p>
+        </div>
+
+        {/* Story Input Box */}
+        <div
+          className="mb-6 p-6"
+          style={{
+            backgroundColor: '#f4e8d0',
+            border: '6px solid #3d2817',
+            boxShadow: 'inset 0 4px 0 #fff9e8',
+            borderRadius: '4px'
+          }}
+        >
+          <div className="mb-4">
+            <div
+              className="inline-block px-4 py-2"
+              style={{
+                backgroundColor: '#5c3d2e',
+                color: '#f4e8d0',
+                fontSize: '13px',
+                fontWeight: 'bold',
+                border: '3px solid #3d2817',
+                borderRadius: '4px',
+                letterSpacing: '1px'
+              }}
+            >
+              ✍ YOUR STORY
+            </div>
+          </div>
+
           <textarea
             value={storyText}
             onChange={(e) => setStoryText(e.target.value)}
-            placeholder="Paste your story here... For example:
+            placeholder="Type your story here...
 
-'In the ancient kingdom of Eldergrove, where magic flows through the trees and shadows whisper secrets, a prophecy speaks of a hero who will restore balance to the realm. Dark forces have awakened in the northern mountains, and the crystal that protects the land grows dim...'
-
-Or leave blank to use random generation."
-            className="w-full h-64 p-4 bg-gray-800/80 text-gray-100 rounded border-2 border-purple-600 focus:border-pink-500 focus:outline-none resize-none font-mono text-sm"
+Example:
+In the village of Harvest Moon, a mysterious stranger arrives with tales of ancient magic and forgotten treasures hidden deep within the enchanted forest..."
+            className="w-full h-64 p-4"
+            style={{
+              backgroundColor: '#fff9e8',
+              border: '4px solid #8b6f47',
+              borderRadius: '4px',
+              color: '#3d2817',
+              fontSize: '14px',
+              lineHeight: '1.7',
+              fontFamily: 'monospace',
+              resize: 'none',
+              boxShadow: 'inset 3px 3px 0 rgba(0,0,0,0.1)'
+            }}
             maxLength={5000}
           />
-          <div className="text-right text-gray-400 text-sm mt-1">
-            {storyText.length} / 5000 characters
+          <div
+            className="text-right mt-2"
+            style={{
+              color: '#8b6f47',
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}
+          >
+            {storyText.length}/5000 characters
           </div>
         </div>
 
-        {storyText.trim() && (
-          <div className="mb-6">
-            <label className="block text-purple-300 font-semibold mb-3">
-              Story Mode
-            </label>
-            <div className="space-y-3">
-              <button
-                onClick={() => setSelectedMode('recreation')}
-                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                  selectedMode === 'recreation'
-                    ? 'bg-purple-600/40 border-purple-400'
-                    : 'bg-gray-800/60 border-gray-600 hover:border-purple-500'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl">🎭</div>
-                  <div className="flex-1">
-                    <div className="font-bold text-white mb-1">Story Recreation</div>
-                    <div className="text-sm text-gray-300">
-                      Play through the actual story. Meet real characters, recreate key scenes.
-                      Choose to play AS a character from the story or create your own.
-                    </div>
-                  </div>
-                  {selectedMode === 'recreation' && (
-                    <div className="text-purple-400">✓</div>
-                  )}
-                </div>
-              </button>
-
-              <button
-                onClick={() => setSelectedMode('continuation')}
-                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                  selectedMode === 'continuation'
-                    ? 'bg-purple-600/40 border-purple-400'
-                    : 'bg-gray-800/60 border-gray-600 hover:border-purple-500'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl">📖</div>
-                  <div className="flex-1">
-                    <div className="font-bold text-white mb-1">Story Continuation</div>
-                    <div className="text-sm text-gray-300">
-                      Takes place AFTER the original story. References events and characters from canon.
-                      New adventures in an established world.
-                    </div>
-                  </div>
-                  {selectedMode === 'continuation' && (
-                    <div className="text-purple-400">✓</div>
-                  )}
-                </div>
-              </button>
-
-              <button
-                onClick={() => setSelectedMode('inspiration')}
-                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                  selectedMode === 'inspiration'
-                    ? 'bg-purple-600/40 border-purple-400'
-                    : 'bg-gray-800/60 border-gray-600 hover:border-purple-500'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl">✨</div>
-                  <div className="flex-1">
-                    <div className="font-bold text-white mb-1">Thematic Inspiration</div>
-                    <div className="text-sm text-gray-300">
-                      Uses the story's world, tone, and atmosphere. Creates original adventures
-                      that FEEL like the source material but aren't tied to the plot.
-                    </div>
-                  </div>
-                  {selectedMode === 'inspiration' && (
-                    <div className="text-purple-400">✓</div>
-                  )}
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-4">
+        {/* Action Buttons */}
+        <div className="flex gap-5">
           <button
             onClick={handleSkip}
-            className="flex-1 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105 border-2 border-gray-600"
+            className="flex-1 py-5 transition-all active:translate-y-2"
+            style={{
+              backgroundColor: '#8b7355',
+              border: '5px solid #5c3d2e',
+              borderRadius: '6px',
+              boxShadow: '0 8px 0 #5c3d2e',
+              color: '#f4e8d0',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              letterSpacing: '2px',
+              cursor: 'pointer'
+            }}
           >
-            Skip (Random Generation)
+            SKIP
           </button>
 
           <button
-            onClick={handleSubmit}
+            onClick={handleNext}
             disabled={!storyText.trim()}
-            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all transform hover:scale-105 border-2 ${
-              storyText.trim()
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-purple-400'
-                : 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed'
-            }`}
+            className="flex-1 py-5 transition-all active:translate-y-2"
+            style={{
+              backgroundColor: storyText.trim() ? '#6fa85c' : '#666',
+              border: `5px solid ${storyText.trim() ? '#4a7039' : '#444'}`,
+              borderRadius: '6px',
+              boxShadow: `0 8px 0 ${storyText.trim() ? '#4a7039' : '#444'}`,
+              color: '#f4e8d0',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              letterSpacing: '2px',
+              cursor: storyText.trim() ? 'pointer' : 'not-allowed',
+              opacity: storyText.trim() ? 1 : 0.6
+            }}
           >
-            Create Game from Story
+            NEXT →
           </button>
-        </div>
-
-        <div className="mt-6 p-4 bg-blue-900/30 rounded border border-blue-500/50">
-          <h3 className="text-blue-300 font-semibold mb-2 flex items-center gap-2">
-            <span>💡</span> Tips for Best Results
-          </h3>
-          <ul className="text-gray-300 text-sm space-y-1 list-disc list-inside">
-            <li>Include setting details (locations, atmosphere, time period)</li>
-            <li>Mention key themes or conflicts in your story</li>
-            <li>Describe the type of world (fantasy, sci-fi, horror, etc.)</li>
-            <li>Reference characters or creatures that could appear</li>
-            <li>Longer stories (500+ words) provide richer context</li>
-          </ul>
         </div>
       </div>
     </div>

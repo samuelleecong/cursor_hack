@@ -7,27 +7,106 @@ import React from 'react';
 
 export const ClassGenerationLoading: React.FC = () => {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
-      <div className="max-w-md w-full bg-gray-900/90 backdrop-blur rounded-lg shadow-2xl p-8 border-2 border-purple-500 text-center">
-        <div className="text-6xl mb-6 animate-bounce">🎮</div>
+    <div
+      className="flex flex-col items-center justify-center min-h-screen p-6"
+      style={{
+        backgroundColor: '#2d5a4e',
+        backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)',
+        fontFamily: 'monospace'
+      }}
+    >
+      <div className="max-w-2xl w-full">
+        {/* Title Box */}
+        <div
+          className="mb-8 p-8 text-center relative"
+          style={{
+            backgroundColor: '#f4e8d0',
+            border: '8px solid #3d2817',
+            boxShadow: '0 10px 0 #3d2817, inset 0 6px 0 #fff9e8',
+            borderRadius: '4px'
+          }}
+        >
+          {/* Corner decorations */}
+          <div style={{ position: 'absolute', top: '10px', left: '10px', width: '20px', height: '20px', borderTop: '4px solid #8b6f47', borderLeft: '4px solid #8b6f47' }}></div>
+          <div style={{ position: 'absolute', top: '10px', right: '10px', width: '20px', height: '20px', borderTop: '4px solid #8b6f47', borderRight: '4px solid #8b6f47' }}></div>
+          <div style={{ position: 'absolute', bottom: '10px', left: '10px', width: '20px', height: '20px', borderBottom: '4px solid #8b6f47', borderLeft: '4px solid #8b6f47' }}></div>
+          <div style={{ position: 'absolute', bottom: '10px', right: '10px', width: '20px', height: '20px', borderBottom: '4px solid #8b6f47', borderRight: '4px solid #8b6f47' }}></div>
 
-        <h1 className="text-3xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-          Generating Character Classes
-        </h1>
-
-        <p className="text-gray-300 mb-6">
-          The AI is analyzing your story and creating unique character classes that fit your world...
-        </p>
-
-        <div className="flex justify-center items-center space-x-2 mb-4">
-          <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
-          <div className="w-3 h-3 bg-pink-500 rounded-full animate-pulse delay-75"></div>
-          <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse delay-150"></div>
+          <div style={{ fontSize: '14px', color: '#8b6f47', marginBottom: '8px' }}>✦ ✦ ✦</div>
+          <div className="text-6xl mb-4 animate-bounce">🎮</div>
+          <h1
+            style={{
+              color: '#5c3d2e',
+              textShadow: '4px 4px 0px #d4a574',
+              letterSpacing: '3px',
+              fontSize: '36px',
+              fontWeight: 'bold',
+              marginBottom: '8px'
+            }}
+          >
+            GENERATING CLASSES
+          </h1>
+          <div className="flex items-center justify-center gap-3 mt-2">
+            <div style={{ width: '60px', height: '4px', backgroundColor: '#8b6f47', borderRadius: '2px' }}></div>
+            <span style={{ color: '#8b6f47', fontSize: '18px' }}>★</span>
+            <div style={{ width: '60px', height: '4px', backgroundColor: '#8b6f47', borderRadius: '2px' }}></div>
+          </div>
         </div>
 
-        <p className="text-gray-400 text-sm">
-          This may take a few seconds...
-        </p>
+        {/* Content Box */}
+        <div
+          className="p-6 text-center"
+          style={{
+            backgroundColor: '#c9b896',
+            border: '6px solid #8b6f47',
+            boxShadow: 'inset 0 4px 0 #e8d4b0',
+            borderRadius: '4px'
+          }}
+        >
+          <p style={{ color: '#3d2817', fontSize: '16px', lineHeight: '1.8', marginBottom: '20px', fontWeight: '500' }}>
+            The AI is analyzing your story and creating unique character classes that fit your world...
+          </p>
+
+          {/* Loading dots */}
+          <div className="flex justify-center items-center space-x-3 mb-4">
+            <div
+              className="animate-pulse"
+              style={{
+                width: '16px',
+                height: '16px',
+                backgroundColor: '#5c3d2e',
+                border: '3px solid #3d2817',
+                borderRadius: '50%'
+              }}
+            ></div>
+            <div
+              className="animate-pulse"
+              style={{
+                width: '16px',
+                height: '16px',
+                backgroundColor: '#5c3d2e',
+                border: '3px solid #3d2817',
+                borderRadius: '50%',
+                animationDelay: '0.2s'
+              }}
+            ></div>
+            <div
+              className="animate-pulse"
+              style={{
+                width: '16px',
+                height: '16px',
+                backgroundColor: '#5c3d2e',
+                border: '3px solid #3d2817',
+                borderRadius: '50%',
+                animationDelay: '0.4s'
+              }}
+            ></div>
+          </div>
+
+          <p style={{ color: '#5c3d2e', fontSize: '13px', fontStyle: 'italic' }}>
+            ⏱ This may take a few seconds...
+          </p>
+        </div>
       </div>
     </div>
   );
