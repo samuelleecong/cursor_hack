@@ -4,6 +4,7 @@
 */
 /* tslint:disable */
 import {CharacterClass} from './characterClasses';
+import {TileMap} from './services/mapGenerator';
 
 export interface AppDefinition {
   id: string;
@@ -41,6 +42,7 @@ export interface Room {
   objects: GameObject[];
   visited: boolean;
   exitDirection: 'right' | 'left' | 'up' | 'down' | null;
+  tileMap?: TileMap; // Tile-based map for this room
 }
 
 export interface GameAnimation {
@@ -48,6 +50,32 @@ export interface GameAnimation {
   value?: number;
   text?: string;
   timestamp: number;
+}
+
+export interface BattleAction {
+  actor: 'player' | 'enemy';
+  type: 'attack' | 'spell' | 'item';
+  damage?: number;
+  text: string;
+}
+
+export type AnimationType = 'slash' | 'damageNumber';
+
+export interface BattleAnimation {
+  type: AnimationType;
+  target: 'player' | 'enemy';
+  value?: number | string;
+  timestamp: number;
+}
+
+export interface BattleState {
+  enemy: GameObject;
+  enemyHP: number;
+  maxEnemyHP: number;
+  status: 'ongoing' | 'player_won' | 'player_lost';
+  turn: 'player' | 'enemy';
+  history: BattleAction[];
+  animationQueue: BattleAnimation[];
 }
 
 export interface GameState {
@@ -61,4 +89,5 @@ export interface GameState {
   rooms: Map<string, Room>;
   roomCounter: number;
   currentAnimation: GameAnimation | null;
+  battleState: BattleState | null;
 }

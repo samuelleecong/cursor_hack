@@ -4,6 +4,7 @@
 */
 /* tslint:disable */
 import {Room, GameObject} from '../types';
+import {generateTileMap, BiomeType} from './mapGenerator';
 
 const ENEMY_SPRITES = ['👹', '👻', '🧟', '🐺', '🦇', '🕷️', '🐍'];
 const NPC_SPRITES = ['👨', '👩', '🧙', '🧙‍♀️', '🧝', '🧝‍♀️', '👴', '👵'];
@@ -33,57 +34,79 @@ export function generateRoom(
     };
   })();
 
+  // Determine biome based on room number
+  let biome: BiomeType = 'forest';
+  if (roomNumber < 3) biome = 'forest';
+  else if (roomNumber < 6) biome = 'plains';
+  else if (roomNumber < 10) biome = 'desert';
+  else if (roomNumber < 15) biome = 'cave';
+  else biome = 'dungeon';
+
+  // Generate tile map with proper pathways
+  const tileMap = generateTileMap(roomId, storySeed, roomNumber, biome);
+
   const objects: GameObject[] = [];
 
   // Determine room type and difficulty
   const roomTypes = ['combat', 'peaceful', 'treasure', 'puzzle', 'mixed'];
   const roomType = roomNumber === 0 ? 'peaceful' : randomChoice(roomTypes);
 
-  // Generate description based on room type
+  // Generate description based on room type and biome
   let description = '';
+  const biomeNames = {
+    forest: 'Forest Path',
+    plains: 'Open Plains',
+    desert: 'Desert Trail',
+    cave: 'Dark Cavern',
+    dungeon: 'Ancient Dungeon',
+  };
+
   switch (roomType) {
     case 'combat':
-      description = '⚔️ A dangerous area - enemies lurk nearby';
+      description = `⚔️ ${biomeNames[biome]} - Danger Ahead`;
       break;
     case 'peaceful':
-      description = '🌿 A calm area - take a moment to rest';
+      description = `🌿 ${biomeNames[biome]} - Safe Haven`;
       break;
     case 'treasure':
-      description = '✨ A chamber filled with treasures';
+      description = `✨ ${biomeNames[biome]} - Treasure Found`;
       break;
     case 'puzzle':
-      description = '🧩 An mysterious place with strange artifacts';
+      description = `🧩 ${biomeNames[biome]} - Mysterious Place`;
       break;
     case 'mixed':
-      description = '🌍 An area with various opportunities';
+      description = `🌍 ${biomeNames[biome]} - Adventure Awaits`;
       break;
   }
 
-  // Add entrance marker for rooms after first
-  if (roomNumber > 0) {
-    objects.push({
-      id: `entrance_${roomId}`,
-      position: {x: 100, y: 300},
-      type: 'entrance',
-      sprite: '🚪',
-      interactionText: 'The way you came from',
-      hasInteracted: false,
-    });
-  }
+  // Place objects strategically along the path
+  const pathPoints = [...tileMap.pathPoints];
 
-  // Generate objects based on room type
+  // Remove spawn point from placement options
+  const safePathPoints = pathPoints.filter(
+    p => Math.abs(p.x - tileMap.spawnPoint.x) > 100 || Math.abs(p.y - tileMap.spawnPoint.y) > 100
+  );
+
+  // Generate objects based on room type - place them along the path
   if (roomType === 'combat' || roomType === 'mixed') {
-    const numEnemies = randomInt(1, 3);
-    for (let i = 0; i < numEnemies; i++) {
+    const numEnemies = randomInt(2, 4);
+    for (let i = 0; i < numEnemies && i < safePathPoints.length; i++) {
+      const pointIndex = Math.floor(i * safePathPoints.length / numEnemies);
+      const point = safePathPoints[pointIndex];
+
+      // Add slight randomness to position
+      const offsetX = (Math.random() - 0.5) * 40;
+      const offsetY = (Math.random() - 0.5) * 40;
+
       objects.push({
         id: `enemy_${roomId}_${i}`,
         position: {
-          x: randomInt(200, 600),
-          y: randomInt(150, 450),
+          x: point.x + offsetX,
+          y: point.y + offsetY,
         },
         type: 'enemy',
         sprite: randomChoice(ENEMY_SPRITES),
-        interactionText: 'A hostile creature',
+        interactionText: 'A hostile creature blocks your path!',
         hasInteracted: false,
       });
     }
@@ -91,47 +114,49 @@ export function generateRoom(
 
   if (roomType === 'peaceful' || roomType === 'mixed') {
     const numNPCs = randomInt(1, 2);
-    for (let i = 0; i < numNPCs; i++) {
+    for (let i = 0; i < numNPCs && i < safePathPoints.length; i++) {
+      const pointIndex = Math.floor(Math.random() * safePathPoints.length);
+      const point = safePathPoints[pointIndex];
+
+      const offsetX = (Math.random() - 0.5) * 40;
+      const offsetY = (Math.random() - 0.5) * 40;
+
       objects.push({
         id: `npc_${roomId}_${i}`,
         position: {
-          x: randomInt(200, 600),
-          y: randomInt(150, 450),
+          x: point.x + offsetX,
+          y: point.y + offsetY,
         },
         type: 'npc',
         sprite: randomChoice(NPC_SPRITES),
-        interactionText: 'A friendly person',
+        interactionText: 'A traveler rests here',
         hasInteracted: false,
       });
     }
   }
 
   if (roomType === 'treasure' || roomType === 'mixed' || roomType === 'puzzle') {
-    const numItems = randomInt(1, 3);
-    for (let i = 0; i < numItems; i++) {
+    const numItems = randomInt(2, 4);
+    for (let i = 0; i < numItems && i < safePathPoints.length; i++) {
+      const pointIndex = Math.floor(Math.random() * safePathPoints.length);
+      const point = safePathPoints[pointIndex];
+
+      const offsetX = (Math.random() - 0.5) * 40;
+      const offsetY = (Math.random() - 0.5) * 40;
+
       objects.push({
         id: `item_${roomId}_${i}`,
         position: {
-          x: randomInt(200, 600),
-          y: randomInt(150, 450),
+          x: point.x + offsetX,
+          y: point.y + offsetY,
         },
         type: 'item',
         sprite: randomChoice(ITEM_SPRITES),
-        interactionText: 'An interesting item',
+        interactionText: 'Something glimmers on the path',
         hasInteracted: false,
       });
     }
   }
-
-  // Add exit on the right side
-  objects.push({
-    id: `exit_${roomId}`,
-    position: {x: 700, y: 300},
-    type: 'exit',
-    sprite: '🚪',
-    interactionText: 'Exit to the next area',
-    hasInteracted: false,
-  });
 
   // Reset Math.random to default
   Math.random = (() => {
@@ -145,6 +170,7 @@ export function generateRoom(
     objects,
     visited: false,
     exitDirection: 'right',
+    tileMap,
   };
 }
 

@@ -3,15 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /* tslint:disable */
-<<<<<<< HEAD
 import React, {useCallback, useEffect, useState} from 'react';
 import {AnimationOverlay} from './components/AnimationOverlay';
 import {CharacterSelection} from './components/CharacterSelection';
+import {VisualBattleScene, BattleSceneData} from './components/VisualBattleScene';
+import {BattleUI} from './components/BattleUI';
 import {GameCanvas} from './components/GameCanvas';
 import {GameHUD} from './components/GameHUD';
-import {GeneratedContent} from './components/GeneratedContent';
 import {Window} from './components/Window';
-import {CHARACTER_CLASSES} from './characterClasses';
+import {CHARACTER_CLASSES, CharacterClass} from './characterClasses';
 import {INITIAL_MAX_HISTORY_LENGTH} from './constants';
 import {streamAppContent} from './services/geminiService';
 import {generateRoom} from './services/roomGenerator';
@@ -22,11 +22,11 @@ import {
   GameObject,
   Room,
   GameAnimation,
+  BattleState
 } from './types';
-import {CharacterClass} from './characterClasses';
 
 const App: React.FC = () => {
-  // Game state
+  // Game state with pixel art battles
   const [gameState, setGameState] = useState<GameState>({
     selectedCharacter: null,
     currentHP: 0,
@@ -38,159 +38,42 @@ const App: React.FC = () => {
     rooms: new Map(),
     roomCounter: 0,
     currentAnimation: null,
+    battleState: null,
   });
 
-  const [llmContent, setLlmContent] = useState<string>('');
-=======
-import React, { useCallback, useEffect, useState } from "react";
-import { GeneratedContent } from "./components/GeneratedContent";
-import { Icon } from "./components/Icon";
-import { ParametersPanel } from "./components/ParametersPanel";
-import { Window } from "./components/Window";
-import {
-  APP_DEFINITIONS_CONFIG,
-  INITIAL_MAX_HISTORY_LENGTH,
-} from "./constants";
-import { streamAppContent } from "./services/geminiService";
-import { AppDefinition, InteractionData } from "./types";
-
-const DesktopView: React.FC<{ onAppOpen: (app: AppDefinition) => void }> = ({
-  onAppOpen,
-}) => (
-  <div className="flex flex-wrap content-start p-4">
-    {APP_DEFINITIONS_CONFIG.map((app) => (
-      <Icon key={app.id} app={app} onInteract={() => onAppOpen(app)} />
-    ))}
-  </div>
-);
-
-const App: React.FC = () => {
-  const [activeApp, setActiveApp] = useState<AppDefinition | null>(null);
-  const [previousActiveApp, setPreviousActiveApp] =
-    useState<AppDefinition | null>(null);
-  const [llmContent, setLlmContent] = useState<string>("");
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
+  const [sceneData, setSceneData] = useState<BattleSceneData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [interactionHistory, setInteractionHistory] = useState<
-    InteractionData[]
-  >([]);
-  const [currentMaxHistoryLength, setCurrentMaxHistoryLength] =
-    useState<number>(INITIAL_MAX_HISTORY_LENGTH);
+  const [interactionHistory, setInteractionHistory] = useState<InteractionData[]>([]);
+  const [currentMaxHistoryLength] = useState<number>(INITIAL_MAX_HISTORY_LENGTH);
   const [showAIDialog, setShowAIDialog] = useState<boolean>(false);
-  const [currentInteractingObject, setCurrentInteractingObject] =
-    useState<GameObject | null>(null);
-
-  const internalHandleLlmRequest = useCallback(
-    async (historyForLlm: InteractionData[], maxHistoryLength: number) => {
-      if (historyForLlm.length === 0) {
-        setError("No interaction data to process.");
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-
-<<<<<<< HEAD
-      let accumulatedContent = '';
-=======
-      let accumulatedContent = "";
-      // Clear llmContent before streaming new content only if not loading from cache
-      // This is now handled before this function is called (in handleAppOpen/handleInteraction)
-      // setLlmContent(''); // Removed from here, set by caller if needed
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
-
-      try {
-        const stream = streamAppContent(
-          historyForLlm,
-          maxHistoryLength,
-          gameState.selectedCharacter?.name,
-          gameState.currentHP,
-          gameState.storySeed,
-        );
-        for await (const chunk of stream) {
-          accumulatedContent += chunk;
-          setLlmContent((prev) => prev + chunk);
-        }
-      } catch (e: any) {
-        setError("Failed to stream content from the API.");
-        console.error(e);
-        accumulatedContent = `<div class="p-4 text-red-600 bg-red-100 rounded-md">Error loading content.</div>`;
-        setLlmContent(accumulatedContent);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-<<<<<<< HEAD
-    [gameState.selectedCharacter, gameState.currentHP, gameState.storySeed],
-  );
+  const [currentInteractingObject, setCurrentInteractingObject] = useState<GameObject | null>(null);
 
   // Handle character selection
-  const handleCharacterSelect = useCallback(
-    (character: CharacterClass) => {
-      const storySeed = Math.floor(Math.random() * 10000);
+  const handleCharacterSelect = useCallback((character: CharacterClass) => {
+    // Generate initial room
+    const initialRoom = generateRoom('room_0', gameState.storySeed, 0);
+    const rooms = new Map<string, Room>();
+    rooms.set('room_0', initialRoom);
 
-      // Generate first room
-      const firstRoom = generateRoom('room_0', storySeed, 0);
-      const roomsMap = new Map<string, Room>();
-      roomsMap.set('room_0', firstRoom);
+    // Set player spawn position from tile map
+    const spawnPosition = initialRoom.tileMap?.spawnPoint || {x: 400, y: 300};
 
-      const newGameState: GameState = {
-        selectedCharacter: character,
-        currentHP: character.startingHP,
-        isAlive: true,
-        storySeed,
-        isInGame: true,
-        playerPosition: {x: 100, y: 300}, // Start on left side
-        currentRoomId: 'room_0',
-        rooms: roomsMap,
-        roomCounter: 0,
-      };
-      setGameState(newGameState);
-      setInteractionHistory([]);
-      setLlmContent('');
-      setError(null);
-      setShowAIDialog(false);
-    },
-    [],
-  );
+    setGameState((prev) => ({
+      ...prev,
+      selectedCharacter: character,
+      currentHP: character.startingHP,
+      isInGame: true,
+      rooms,
+      playerPosition: spawnPosition,
+      battleState: null,
+    }));
+  }, [gameState.storySeed]);
 
   // Handle player movement
   const handlePlayerMove = useCallback((newPosition: Position) => {
-    setGameState((prev) => ({
-      ...prev,
-      playerPosition: newPosition,
-    }));
+    setGameState((prev) => ({...prev, playerPosition: newPosition}));
   }, []);
-=======
-    []
-  );
-
-  // Effect to cache content when loading finishes and statefulness is enabled
-  useEffect(() => {
-    if (
-      !isLoading &&
-      currentAppPath.length > 0 &&
-      isStatefulnessEnabled &&
-      llmContent
-    ) {
-      const cacheKey = currentAppPath.join("__");
-      // Update cache if content is different or not yet cached for this path
-      if (appContentCache[cacheKey] !== llmContent) {
-        setAppContentCache((prevCache) => ({
-          ...prevCache,
-          [cacheKey]: llmContent,
-        }));
-      }
-    }
-  }, [
-    llmContent,
-    isLoading,
-    currentAppPath,
-    isStatefulnessEnabled,
-    appContentCache,
-  ]);
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
 
   // Handle screen exit (moving to edge)
   const handleScreenExit = useCallback(
@@ -209,22 +92,8 @@ const App: React.FC = () => {
         const newRooms = new Map(prev.rooms);
         newRooms.set(newRoomId, newRoom);
 
-        // Set new player position based on exit direction
-        let newPosition: Position;
-        switch (direction) {
-          case 'right':
-            newPosition = {x: 100, y: 300}; // Enter from left
-            break;
-          case 'left':
-            newPosition = {x: 700, y: 300}; // Enter from right
-            break;
-          case 'up':
-            newPosition = {x: 400, y: 550}; // Enter from bottom
-            break;
-          case 'down':
-            newPosition = {x: 400, y: 50}; // Enter from top
-            break;
-        }
+        // Use spawn point from new room
+        const newPosition = newRoom.tileMap?.spawnPoint || {x: 400, y: 300};
 
         return {
           ...prev,
@@ -238,34 +107,198 @@ const App: React.FC = () => {
     [],
   );
 
+  const internalHandleLlmRequest = useCallback(
+    async (historyForLlm: InteractionData[], maxHistoryLength: number, updatedHP?: number) => {
+      if (historyForLlm.length === 0) {
+        setError('No interaction data to process.');
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      let accumulatedContent = '';
+
+      try {
+        const stream = streamAppContent(
+          historyForLlm,
+          maxHistoryLength,
+          gameState.selectedCharacter?.name,
+          updatedHP ?? gameState.currentHP, // Use updatedHP if provided
+          gameState.storySeed,
+        );
+        for await (const chunk of stream) {
+          accumulatedContent += chunk;
+        }
+
+        // Parse JSON response
+        try {
+          // Remove markdown code blocks if present
+          let jsonText = accumulatedContent.trim();
+          if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
+          }
+
+          const parsedScene: BattleSceneData = JSON.parse(jsonText);
+
+          // Validate that required fields exist
+          if (!parsedScene.scene || !parsedScene.imagePrompts || !parsedScene.choices) {
+            throw new Error('Missing required fields in AI response');
+          }
+
+          setSceneData(parsedScene);
+        } catch (parseError) {
+          console.error('Failed to parse JSON:', parseError);
+          console.log('Raw content:', accumulatedContent);
+          setError('Failed to parse scene data. The AI response was not valid JSON.');
+        }
+      } catch (e: any) {
+        setError('Failed to stream content from the API.');
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [gameState.selectedCharacter, gameState.currentHP, gameState.storySeed],
+  );
+
   // Handle object interaction
   const handleObjectInteract = useCallback(
     (object: GameObject) => {
-      setCurrentInteractingObject(object);
+      if (object.type === 'enemy') {
+        // Start a battle
+        setGameState(prev => ({
+          ...prev,
+          battleState: {
+            enemy: object,
+            enemyHP: 100,
+            maxEnemyHP: 100,
+            status: 'ongoing',
+            turn: 'player',
+            history: [],
+            animationQueue: [],
+          }
+        }));
+      } else {
+        // Handle other interactions (NPCs, items)
+        setCurrentInteractingObject(object);
 
-      // Mark object as interacted
-      setGameState((prev) => {
-        const room = prev.rooms.get(prev.currentRoomId);
-        if (!room) return prev;
+        // Mark object as interacted
+        setGameState((prev) => {
+          const room = prev.rooms.get(prev.currentRoomId);
+          if (!room) return prev;
 
-        const updatedObjects = room.objects.map((obj) =>
-          obj.id === object.id ? {...obj, hasInteracted: true} : obj,
-        );
+          const updatedObjects = room.objects.map((obj) =>
+            obj.id === object.id ? {...obj, hasInteracted: true} : obj,
+          );
 
-        const updatedRoom = {...room, objects: updatedObjects};
-        const newRooms = new Map(prev.rooms);
-        newRooms.set(prev.currentRoomId, updatedRoom);
+          const updatedRoom = {...room, objects: updatedObjects};
+          const newRooms = new Map(prev.rooms);
+          newRooms.set(prev.currentRoomId, updatedRoom);
 
-        return {...prev, rooms: newRooms};
-      });
+          return {...prev, rooms: newRooms};
+        });
 
-      // Create interaction data for AI
+        // Create interaction data for AI
+        const interactionData: InteractionData = {
+          id: object.id,
+          type: object.type,
+          elementText: `${object.interactionText} (${object.sprite})`,
+          elementType: 'game_object',
+          appContext: 'roguelike_game',
+        };
+
+        const newHistory = [
+          interactionData,
+          ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
+        ];
+        setInteractionHistory(newHistory);
+        setSceneData(null);
+        setError(null);
+        setShowAIDialog(true);
+
+        internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
+      }
+    },
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest],
+  );
+
+  const handleCombatChoice = useCallback(
+    async (choiceId: string, choiceType: string, value?: number) => {
+      // Check for conclude action - close dialog and return to exploration
+      if (choiceType === 'conclude') {
+        setShowAIDialog(false);
+        setSceneData(null);
+        setCurrentInteractingObject(null);
+        return;
+      }
+
+      // Check for death
+      if (choiceType === 'death' || choiceId === 'player_death') {
+        setGameState((prev) => ({...prev, isAlive: false}));
+        setShowAIDialog(false);
+        return;
+      }
+
+      let newHP = gameState.currentHP;
+
+      // Handle animations and HP changes based on choice type
+      if (choiceType === 'combat' || choiceType === 'damage') {
+        const damage = value || 10;
+        newHP = Math.max(0, gameState.currentHP - damage);
+        setGameState((prev) => ({
+          ...prev,
+          currentHP: newHP,
+          currentAnimation: {
+            type: 'damage',
+            value: damage,
+            text: `Took ${damage} damage!`,
+            timestamp: Date.now(),
+          },
+          isAlive: newHP > 0,
+        }));
+      } else if (choiceType === 'heal') {
+        const healAmount = value || 15;
+        const maxHP = gameState.selectedCharacter?.startingHP || 100;
+        newHP = Math.min(maxHP, gameState.currentHP + healAmount);
+        setGameState((prev) => ({
+          ...prev,
+          currentHP: newHP,
+          currentAnimation: {
+            type: 'heal',
+            value: healAmount,
+            text: `Healed ${healAmount} HP!`,
+            timestamp: Date.now(),
+          },
+        }));
+      } else if (choiceType === 'loot') {
+        setGameState((prev) => ({
+          ...prev,
+          currentAnimation: {
+            type: 'loot',
+            text: 'Found loot!',
+            timestamp: Date.now(),
+          },
+        }));
+      } else if (choiceType === 'dialogue') {
+        setGameState((prev) => ({
+          ...prev,
+          currentAnimation: {
+            type: 'dialogue',
+            text: 'Talking...',
+            timestamp: Date.now(),
+          },
+        }));
+      }
+
+      // Create interaction data for history
       const interactionData: InteractionData = {
-        id: object.id,
-        type: object.type,
-        elementText: `${object.interactionText} (${object.sprite})`,
-        elementType: 'game_object',
+        id: choiceId,
+        type: choiceType,
+        elementText: sceneData?.choices.find((c) => c.id === choiceId)?.text || '',
+        elementType: 'choice_button',
         appContext: 'roguelike_game',
+        value: value?.toString(),
       };
 
       const newHistory = [
@@ -273,306 +306,161 @@ const App: React.FC = () => {
         ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
       ];
       setInteractionHistory(newHistory);
-      setLlmContent('');
+      setSceneData(null);
       setError(null);
-      setShowAIDialog(true);
 
-      internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
+      // Call LLM with the updated HP value
+      internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter],
   );
 
-  // Handle AI dialog interaction (choice buttons in AI response)
-  const handleAIDialogInteraction = useCallback(
-    async (interactionData: InteractionData) => {
-<<<<<<< HEAD
-      // Check for death
-      if (
-        interactionData.id === 'player_death' ||
-        interactionData.type === 'death'
-      ) {
-        setGameState((prev) => ({...prev, isAlive: false}));
-        setShowAIDialog(false);
-=======
-      if (interactionData.id === "app_close_button") {
-        // This specific ID might not be generated by LLM
-        handleCloseAppView(); // Use existing close logic
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
-        return;
-      }
+  const handleBattleAction = useCallback((action: string) => {
+    if (!gameState.battleState || gameState.battleState.turn !== 'player') return;
 
-      // Check for conclude action - close dialog and return to exploration
-      if (interactionData.type === 'conclude') {
-        setShowAIDialog(false);
-        setLlmContent('');
-        setCurrentInteractingObject(null);
-        return;
-      }
+    const playerDamage = 25; // Hardcoded for now
 
-      // Handle animations based on interaction type
-      const damageValue = interactionData.value
-        ? parseInt(interactionData.value)
-        : undefined;
+    // Player's turn
+    if (action === 'attack') {
+      const newEnemyHP = Math.max(0, gameState.battleState.enemyHP - playerDamage);
+      const playerAnimations: BattleAnimation[] = [
+        { type: 'slash', target: 'enemy', timestamp: Date.now() },
+        { type: 'damageNumber', target: 'enemy', value: playerDamage, timestamp: Date.now() },
+      ];
 
-      if (
-        interactionData.type === 'combat' ||
-        interactionData.type === 'damage'
-      ) {
-        const damage = damageValue || 10;
-        setGameState((prev) => {
-          const newHP = Math.max(0, prev.currentHP - damage);
-          return {
+      const newBattleState: BattleState = {
+        ...gameState.battleState,
+        enemyHP: newEnemyHP,
+        status: newEnemyHP <= 0 ? 'player_won' : 'ongoing',
+        turn: 'enemy',
+        animationQueue: [...gameState.battleState.animationQueue, ...playerAnimations],
+      };
+
+      setGameState(prev => ({ ...prev, battleState: newBattleState }));
+
+      // Enemy's turn (after a delay)
+      if (newEnemyHP > 0) {
+        setTimeout(() => {
+          const enemyDamage = 15; // Hardcoded for now
+          const newPlayerHP = Math.max(0, gameState.currentHP - enemyDamage);
+          const enemyAnimations: BattleAnimation[] = [
+            { type: 'slash', target: 'player', timestamp: Date.now() },
+            { type: 'damageNumber', target: 'player', value: enemyDamage, timestamp: Date.now() },
+          ];
+
+          setGameState(prev => ({
             ...prev,
-            currentHP: newHP,
+            currentHP: newPlayerHP,
+            battleState: {
+              ...newBattleState,
+              status: newPlayerHP <= 0 ? 'player_lost' : 'ongoing',
+              turn: 'player',
+              animationQueue: [...newBattleState.animationQueue, ...enemyAnimations],
+            },
             currentAnimation: {
               type: 'damage',
-              value: damage,
-              text: interactionData.elementText,
+              value: enemyDamage,
+              text: `Took ${enemyDamage} damage!`,
               timestamp: Date.now(),
             },
-            isAlive: newHP > 0,
-          };
-        });
-      } else if (interactionData.type === 'heal') {
-        const healAmount = damageValue || 15;
-        setGameState((prev) => {
-          const maxHP = prev.selectedCharacter?.startingHP || 100;
-          const newHP = Math.min(maxHP, prev.currentHP + healAmount);
+          }));
+        }, 1000);
+      }
+    }
+  }, [gameState.battleState, gameState.currentHP]);
+
+  // Effect to clear animation queue after processing
+  useEffect(() => {
+    if (gameState.battleState?.animationQueue && gameState.battleState.animationQueue.length > 0) {
+      const timer = setTimeout(() => {
+        setGameState(prev => {
+          if (!prev.battleState) return prev;
           return {
             ...prev,
-            currentHP: newHP,
-            currentAnimation: {
-              type: 'heal',
-              value: healAmount,
-              text: interactionData.elementText,
-              timestamp: Date.now(),
+            battleState: {
+              ...prev.battleState,
+              animationQueue: [],
             },
           };
         });
-      } else if (interactionData.type === 'loot') {
-        setGameState((prev) => ({
-          ...prev,
-          currentAnimation: {
-            type: 'loot',
-            text: interactionData.elementText,
-            timestamp: Date.now(),
-          },
-        }));
-      } else if (interactionData.type === 'dialogue') {
-        setGameState((prev) => ({
-          ...prev,
-          currentAnimation: {
-            type: 'dialogue',
-            text: interactionData.elementText,
-            timestamp: Date.now(),
-          },
-        }));
-      }
+      }, 100);
 
-      const newHistory = [
-        interactionData,
-        ...interactionHistory.slice(0, currentMaxHistoryLength - 1),
-      ];
-      setInteractionHistory(newHistory);
-
-<<<<<<< HEAD
-      setLlmContent('');
-=======
-      const newPath = activeApp
-        ? [...currentAppPath, interactionData.id]
-        : [interactionData.id];
-      setCurrentAppPath(newPath);
-      const cacheKey = newPath.join("__");
-
-      setLlmContent("");
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
-      setError(null);
-
-      internalHandleLlmRequest(newHistory, currentMaxHistoryLength);
-    },
-<<<<<<< HEAD
-    [interactionHistory, internalHandleLlmRequest, currentMaxHistoryLength],
-  );
-
-  // Close AI dialog
-  const handleCloseAIDialog = useCallback(() => {
-    setShowAIDialog(false);
-    setLlmContent('');
-    setCurrentInteractingObject(null);
-  }, []);
-=======
-    [
-      interactionHistory,
-      internalHandleLlmRequest,
-      activeApp,
-      currentMaxHistoryLength,
-      currentAppPath,
-      isStatefulnessEnabled,
-      appContentCache,
-    ]
-  );
-
-  const handleAppOpen = (app: AppDefinition) => {
-    const initialInteraction: InteractionData = {
-      id: app.id,
-      type: "app_open",
-      elementText: app.name,
-      elementType: "icon",
-      appContext: app.id,
-    };
-
-    const newHistory = [initialInteraction];
-    setInteractionHistory(newHistory);
-
-    const appPath = [app.id];
-    setCurrentAppPath(appPath);
-    const cacheKey = appPath.join("__");
-
-    if (isParametersOpen) {
-      setIsParametersOpen(false);
+      return () => clearTimeout(timer);
     }
-    setActiveApp(app);
-    setLlmContent("");
-    setError(null);
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
+  }, [gameState.battleState?.animationQueue]);
+
+  const handleBattleEnd = useCallback(() => {
+    if (!gameState.battleState) return;
+
+    const updatedRooms = new Map(gameState.rooms);
+    const currentRoom = updatedRooms.get(gameState.currentRoomId);
+
+    if (currentRoom && gameState.battleState.status === 'player_won') {
+      // Remove defeated enemy from the room
+      const newObjects = currentRoom.objects.filter(
+        (obj) => obj.id !== gameState.battleState?.enemy.id
+      );
+      const updatedRoom = { ...currentRoom, objects: newObjects };
+      updatedRooms.set(gameState.currentRoomId, updatedRoom);
+    }
+
+    setGameState(prev => ({
+      ...prev,
+      battleState: null,
+      rooms: updatedRooms,
+    }));
+  }, [gameState.battleState, gameState.rooms, gameState.currentRoomId]);
 
   // Clear animation
   const handleAnimationComplete = useCallback(() => {
     setGameState((prev) => ({...prev, currentAnimation: null}));
   }, []);
 
-<<<<<<< HEAD
-  // Handle game restart after death
+  // Close AI dialog
+  const handleCloseAIDialog = useCallback(() => {
+    setShowAIDialog(false);
+    setSceneData(null);
+    setCurrentInteractingObject(null);
+  }, []);
+
+  // Restart game
   const handleRestart = useCallback(() => {
+    const newSeed = Math.floor(Math.random() * 10000);
     setGameState({
       selectedCharacter: null,
       currentHP: 0,
       isAlive: true,
-      storySeed: Math.floor(Math.random() * 10000),
+      storySeed: newSeed,
       isInGame: false,
       playerPosition: {x: 400, y: 300},
       currentRoomId: 'room_0',
       rooms: new Map(),
       roomCounter: 0,
       currentAnimation: null,
+      battleState: null,
     });
-    setLlmContent('');
-=======
-  const handleCloseAppView = () => {
-    setActiveApp(null);
-    setLlmContent("");
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
+    setSceneData(null);
     setError(null);
     setInteractionHistory([]);
     setShowAIDialog(false);
     setCurrentInteractingObject(null);
   }, []);
 
-<<<<<<< HEAD
   // Get current room
   const currentRoom = gameState.rooms.get(gameState.currentRoomId);
 
-  const windowTitle = gameState.isInGame
-    ? `${gameState.selectedCharacter?.name}'s Adventure`
-    : 'Roguelike RPG';
-  const contentBgColor = '#1f2937';
-=======
-  const handleToggleParametersPanel = () => {
-    setIsParametersOpen((prevIsOpen) => {
-      const nowOpeningParameters = !prevIsOpen;
-      if (nowOpeningParameters) {
-        // Store the currently active app (if any) so it can be restored,
-        // or null if no app is active (desktop view).
-        setPreviousActiveApp(activeApp);
-        setActiveApp(null); // Clear active app to show parameters panel
-        setLlmContent("");
-        setError(null);
-        // Interaction history and current path are not cleared here,
-        // as they might be relevant if the user returns to an app.
-      } else {
-        // Closing parameters panel - always go back to desktop view
-        setPreviousActiveApp(null); // Clear any stored previous app
-        setActiveApp(null); // Ensure desktop view
-        setLlmContent("");
-        setError(null);
-        setInteractionHistory([]); // Clear history when returning to desktop from parameters
-        setCurrentAppPath([]); // Clear app path
-      }
-      return nowOpeningParameters;
-    });
-  };
-
-  const handleUpdateHistoryLength = (newLength: number) => {
-    setCurrentMaxHistoryLength(newLength);
-    // Trim interaction history if new length is shorter
-    setInteractionHistory((prev) => prev.slice(0, newLength));
-  };
-
-  const handleSetStatefulness = (enabled: boolean) => {
-    setIsStatefulnessEnabled(enabled);
-    if (!enabled) {
-      setAppContentCache({});
-    }
-  };
-
-  const windowTitle = isParametersOpen
-    ? "Gemini Computer"
-    : activeApp
-    ? activeApp.name
-    : "Gemini Computer";
-  const contentBgColor = "#ffffff";
-
-  const handleMasterClose = () => {
-    if (isParametersOpen) {
-      handleToggleParametersPanel();
-    } else if (activeApp) {
-      handleCloseAppView();
-    }
-  };
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
-
   return (
-    <div className="bg-gray-900 w-full min-h-screen flex items-center justify-center p-4">
+    <div className="bg-gray-900 w-screen h-screen overflow-hidden">
       <AnimationOverlay
         animation={gameState.currentAnimation}
         onComplete={handleAnimationComplete}
       />
-      <Window
-        title={windowTitle}
-<<<<<<< HEAD
-        onClose={handleRestart}
-        isAppOpen={gameState.isInGame}
-        appId="roguelike_game"
-        onToggleParameters={() => {}}
-        onExitToDesktop={handleRestart}
-        isParametersPanelOpen={false}>
-        <div
-          className="w-full h-full flex flex-col"
-          style={{backgroundColor: contentBgColor}}>
-          {!gameState.isInGame ? (
+      <Window title="Roguelike Adventure">
+        <div className="w-full h-full" style={{backgroundColor: '#1a1a2e'}}>
+          {!gameState.selectedCharacter ? (
             <CharacterSelection
               characters={CHARACTER_CLASSES}
               onSelectCharacter={handleCharacterSelect}
-=======
-        onClose={handleMasterClose}
-        isAppOpen={!!activeApp && !isParametersOpen}
-        appId={activeApp?.id}
-        onToggleParameters={handleToggleParametersPanel}
-        onExitToDesktop={handleCloseAppView}
-        isParametersPanelOpen={isParametersOpen}
-      >
-        <div
-          className="w-full h-full"
-          style={{ backgroundColor: contentBgColor }}
-        >
-          {isParametersOpen ? (
-            <ParametersPanel
-              currentLength={currentMaxHistoryLength}
-              onUpdateHistoryLength={handleUpdateHistoryLength}
-              onClosePanel={handleToggleParametersPanel}
-              isStatefulnessEnabled={isStatefulnessEnabled}
-              onSetStatefulness={handleSetStatefulness}
->>>>>>> 350daf04b4d846158d75496477e701b68f0c9e03
             />
           ) : !gameState.isAlive ? (
             <div className="flex flex-col items-center justify-center h-full p-8 bg-gradient-to-b from-red-900 to-black">
@@ -586,7 +474,8 @@ const App: React.FC = () => {
               </p>
               <button
                 onClick={handleRestart}
-                className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-bold text-lg rounded-lg transition-all duration-200 transform hover:scale-105">
+                className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-bold text-lg rounded-lg transition-all duration-200 transform hover:scale-105"
+              >
                 Begin a New Adventure
               </button>
             </div>
@@ -602,54 +491,45 @@ const App: React.FC = () => {
                 {currentRoom && gameState.selectedCharacter && (
                   <GameCanvas
                     character={gameState.selectedCharacter}
+                    currentHP={gameState.currentHP}
                     playerPosition={gameState.playerPosition}
                     objects={currentRoom.objects}
                     onMove={handlePlayerMove}
                     onInteract={handleObjectInteract}
                     onScreenExit={handleScreenExit}
+                    onBattleEnd={handleBattleEnd}
                     roomDescription={currentRoom.description}
+                    room={currentRoom}
+                    battleState={gameState.battleState}
                   />
                 )}
 
-                {/* AI Dialog Overlay */}
+                <BattleUI battleState={gameState.battleState} onPlayerAction={handleBattleAction} />
+
+                {/* Visual Battle Scene Overlay */}
                 {showAIDialog && (
-                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-8 z-10">
-                    <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[80%] overflow-y-auto border-4 border-blue-500 shadow-2xl">
-                      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 flex justify-between items-center">
-                        <h3 className="text-xl font-bold text-white">
-                          {currentInteractingObject?.sprite}{' '}
-                          {currentInteractingObject?.interactionText}
-                        </h3>
-                        <button
-                          onClick={handleCloseAIDialog}
-                          className="text-white hover:text-red-400 font-bold text-2xl">
-                          ✕
-                        </button>
+                  <div className="absolute inset-0 z-10">
+                    {error ? (
+                      <div className="w-full h-full flex items-center justify-center bg-black/90">
+                        <div className="bg-red-900/80 p-8 rounded-lg border-4 border-red-500 max-w-lg">
+                          <h2 className="text-2xl font-bold text-red-200 mb-4">Error</h2>
+                          <p className="text-red-100 mb-4">{error}</p>
+                          <button
+                            onClick={handleCloseAIDialog}
+                            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg"
+                          >
+                            Close
+                          </button>
+                        </div>
                       </div>
-                      <div className="p-6">
-                        {isLoading && llmContent.length === 0 && (
-                          <div className="flex flex-col justify-center items-center py-12">
-                            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
-                            <p className="text-gray-400">
-                              Generating story...
-                            </p>
-                          </div>
-                        )}
-                        {error && (
-                          <div className="p-4 text-red-300 bg-red-900/50 rounded-md border border-red-700">
-                            {error}
-                          </div>
-                        )}
-                        {(!isLoading || llmContent) && (
-                          <GeneratedContent
-                            htmlContent={llmContent}
-                            onInteract={handleAIDialogInteraction}
-                            appContext="roguelike_game"
-                            isLoading={isLoading}
-                          />
-                        )}
-                      </div>
-                    </div>
+                    ) : (
+                      <VisualBattleScene
+                        sceneData={sceneData}
+                        onChoice={handleCombatChoice}
+                        isLoading={isLoading}
+                        characterClass={gameState.selectedCharacter?.name}
+                      />
+                    )}
                   </div>
                 )}
               </div>
