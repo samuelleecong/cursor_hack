@@ -6,8 +6,14 @@
 import * as fal from '@fal-ai/serverless-client';
 import { spriteCache } from './spriteCache';
 
+// Use environment variable for credentials
+const falKey = import.meta.env.VITE_FAL_KEY;
+if (!falKey) {
+  console.error('[SpriteGen] VITE_FAL_KEY not found in environment variables');
+}
+
 fal.config({
-  credentials: 'a2570e68-cecf-427f-bac2-8088260cf7cc:71a537235ff88639ac23425615b658ed',
+  credentials: falKey,
 });
 
 export interface SpriteGenerationParams {
