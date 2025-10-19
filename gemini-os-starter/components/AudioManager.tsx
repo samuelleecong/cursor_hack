@@ -81,7 +81,11 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
    * Load main theme after character selection
    */
   useEffect(() => {
-    if (!musicEnabled) return;
+    // Don't load music if disabled
+    if (!musicEnabled) {
+      console.log('[AudioManager] Music disabled, skipping main theme load');
+      return;
+    }
 
     // Load main theme when character is selected and game starts
     if (gameState.selectedCharacter && gameState.isInGame && !mainThemeLoaded) {
@@ -96,7 +100,11 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
    * Handle battle state changes - layer battle music over main theme
    */
   useEffect(() => {
-    if (!musicEnabled || !gameState.isInGame) return;
+    // Don't play battle music if music is disabled
+    if (!musicEnabled || !gameState.isInGame) {
+      console.log('[AudioManager] Music disabled or not in game, skipping battle music');
+      return;
+    }
 
     const inBattle = gameState.battleState?.status === 'ongoing';
 
@@ -130,7 +138,11 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
    * Handle character death and restart - regenerate main theme on restart
    */
   useEffect(() => {
-    if (!musicEnabled) return;
+    // Don't play defeat/restart music if music is disabled
+    if (!musicEnabled) {
+      console.log('[AudioManager] Music disabled, skipping defeat/restart music');
+      return;
+    }
 
     // Player just died
     if (!gameState.isAlive && prevIsAlive) {
@@ -168,12 +180,16 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
     setMusicEnabled(newState);
     localStorage.setItem('gemini-os-music-enabled', JSON.stringify(newState));
 
-    if (newState && !isPlaying) {
-      play();
-    } else if (!newState && isPlaying) {
-      pause();
+    if (newState) {
+      // Turning music ON - resume playback
+      console.log('[AudioManager] Music enabled, resuming playback...');
+      play(); // Now properly resumes main theme
+    } else {
+      // Turning music OFF - pause ALL audio (main theme, overlay, everything)
+      console.log('[AudioManager] Music disabled, pausing all audio...');
+      pause(); // Now pauses ALL audio including main theme and overlay
     }
-  }, [musicEnabled, isPlaying, play, pause]);
+  }, [musicEnabled, play, pause]);
 
   /**
    * Change volume

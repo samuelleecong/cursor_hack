@@ -125,6 +125,7 @@ export async function generateRoom(
   storyMode?: StoryMode,
   previousRoomDescription?: string,
   generateSceneImage: boolean = true, // Flag to control scene generation
+  storyBeat?: any, // Story beat from story structure (recreation mode)
 ): Promise<Room> {
   // Use storySeed + roomNumber for consistent randomization
   const seed = storySeed + roomNumber * 1000;
@@ -148,26 +149,35 @@ export async function generateRoom(
   const roomTypes = ['combat', 'peaceful', 'treasure', 'puzzle', 'mixed'];
   const roomType = roomNumber === 0 ? 'peaceful' : randomChoice(roomTypes);
 
-  // Generate description based on room type and biome
+  // Generate description based on story beat (recreation mode) or room type
   let description = '';
   const biomeName = biomeDefinition.name;
 
-  switch (roomType) {
-    case 'combat':
-      description = `⚔️ ${biomeName} - Danger Ahead`;
-      break;
-    case 'peaceful':
-      description = `🌿 ${biomeName} - Safe Haven`;
-      break;
-    case 'treasure':
-      description = `✨ ${biomeName} - Treasure Found`;
-      break;
-    case 'puzzle':
-      description = `🧩 ${biomeName} - Mysterious Place`;
-      break;
-    case 'mixed':
-      description = `🌍 ${biomeName} - Adventure Awaits`;
-      break;
+  if (storyBeat && storyMode === 'recreation') {
+    // RECREATION MODE: Use story beat title and description
+    description = `📖 ${storyBeat.title}`;
+    console.log(`[RoomGenerator] Recreation mode - Room ${roomNumber}: ${storyBeat.title}`);
+    console.log(`  Objective: ${storyBeat.objective}`);
+    console.log(`  Key Characters: ${storyBeat.keyCharacters.join(', ')}`);
+  } else {
+    // Regular mode: Use biome name and room type
+    switch (roomType) {
+      case 'combat':
+        description = `⚔️ ${biomeName} - Danger Ahead`;
+        break;
+      case 'peaceful':
+        description = `🌿 ${biomeName} - Safe Haven`;
+        break;
+      case 'treasure':
+        description = `✨ ${biomeName} - Treasure Found`;
+        break;
+      case 'puzzle':
+        description = `🧩 ${biomeName} - Mysterious Place`;
+        break;
+      case 'mixed':
+        description = `🌍 ${biomeName} - Adventure Awaits`;
+        break;
+    }
   }
 
   // Place objects strategically along the path
@@ -179,54 +189,110 @@ export async function generateRoom(
   );
 
   // Generate objects based on room type - place them along the path
-  if (roomType === 'combat' || roomType === 'mixed') {
-    const numEnemies = randomInt(2, 4);
-    for (let i = 0; i < numEnemies && i < safePathPoints.length; i++) {
-      // Use collision-aware placement
-      const position = findValidPosition(safePathPoints, objects, 20, 100);
+  // RECREATION MODE: Spawn specific story characters
+  if (storyBeat && storyMode === 'recreation' && storyBeat.keyCharacters && storyBeat.keyCharacters.length > 0) {
+    console.log(`[RoomGenerator] Recreation mode - spawning story characters: ${storyBeat.keyCharacters.join(', ')}`);
 
-      // Skip if we couldn't find a valid position
+    // Spawn each key character from the story beat
+    for (let i = 0; i < storyBeat.keyCharacters.length && i < safePathPoints.length; i++) {
+      const position = findValidPosition(safePathPoints, objects, 20, 100);
       if (!position) continue;
 
-      const enemyLevel = Math.max(1, Math.floor(roomNumber / 2) + 1);
-      const fallbackSprite = randomChoice(ENEMY_SPRITES);
+      const characterName = storyBeat.keyCharacters[i];
 
-      objects.push({
-        id: `enemy_${roomId}_${i}`,
-        position,
-        type: 'enemy',
-        sprite: fallbackSprite,
-        interactionText: `A hostile creature (Lv ${enemyLevel}) blocks your path!`,
-        hasInteracted: false,
-        enemyLevel: enemyLevel,
-        itemDrop: generateRandomItem(roomNumber),
-      });
+      // Determine if this character should be an enemy or NPC based on context
+      // (We'll use a heuristic: if objective contains combat words, spawn as enemy)
+      const combatKeywords = ['fight', 'battle', 'defeat', 'attack', 'confront', 'enemy', 'rival'];
+      const isHostile = combatKeywords.some(keyword =>
+        storyBeat.objective.toLowerCase().includes(keyword) ||
+        storyBeat.description.toLowerCase().includes(keyword)
+      );
+
+      if (isHostile && i === 0) {
+        // First character is the main antagonist of this beat
+        const enemyLevel = Math.max(1, roomNumber + 1);
+        objects.push({
+          id: `story_enemy_${roomId}_${i}`,
+          position,
+          type: 'enemy',
+          sprite: randomChoice(ENEMY_SPRITES),
+          interactionText: `${characterName} stands in your way! (Lv ${enemyLevel})`,
+          hasInteracted: false,
+          enemyLevel: enemyLevel,
+          itemDrop: generateRandomItem(roomNumber),
+        });
+        console.log(`  - Spawned enemy: ${characterName}`);
+      } else {
+        // Other characters are NPCs
+        const interactionText = await generateNPCInteractionText(
+          characterName,
+          roomNumber,
+          `${storyContext}\n\nCurrent scene: ${storyBeat.description}\nObjective: ${storyBeat.objective}`,
+          storyMode
+        );
+
+        objects.push({
+          id: `story_npc_${roomId}_${i}`,
+          position,
+          type: 'npc',
+          sprite: randomChoice(NPC_SPRITES),
+          interactionText: `${characterName}: ${interactionText}`,
+          hasInteracted: false,
+        });
+        console.log(`  - Spawned NPC: ${characterName}`);
+      }
     }
-  }
+  } else {
+    // REGULAR MODE: Random enemies and NPCs
+    if (roomType === 'combat' || roomType === 'mixed') {
+      const numEnemies = randomInt(2, 4);
+      for (let i = 0; i < numEnemies && i < safePathPoints.length; i++) {
+        // Use collision-aware placement
+        const position = findValidPosition(safePathPoints, objects, 20, 100);
 
-  if (roomType === 'peaceful' || roomType === 'mixed') {
-    const numNPCs = randomInt(1, 2);
-    for (let i = 0; i < numNPCs && i < safePathPoints.length; i++) {
-      // Use collision-aware placement
-      const position = findValidPosition(safePathPoints, objects, 20, 100);
+        // Skip if we couldn't find a valid position
+        if (!position) continue;
 
-      // Skip if we couldn't find a valid position
-      if (!position) continue;
+        const enemyLevel = Math.max(1, Math.floor(roomNumber / 2) + 1);
+        const fallbackSprite = randomChoice(ENEMY_SPRITES);
 
-      // Generate story-aware NPC description (we'll use this in roomSpriteEnhancer)
-      // For now, use generic but mark for AI enhancement
-      const interactionText = storyContext
-        ? await generateNPCInteractionText('npc', roomNumber, storyContext, storyMode || 'inspiration')
-        : 'A traveler rests here';
+        objects.push({
+          id: `enemy_${roomId}_${i}`,
+          position,
+          type: 'enemy',
+          sprite: fallbackSprite,
+          interactionText: `A hostile creature (Lv ${enemyLevel}) blocks your path!`,
+          hasInteracted: false,
+          enemyLevel: enemyLevel,
+          itemDrop: generateRandomItem(roomNumber),
+        });
+      }
+    }
 
-      objects.push({
-        id: `npc_${roomId}_${i}`,
-        position,
-        type: 'npc',
-        sprite: randomChoice(NPC_SPRITES),
-        interactionText,
-        hasInteracted: false,
-      });
+    if (roomType === 'peaceful' || roomType === 'mixed') {
+      const numNPCs = randomInt(1, 2);
+      for (let i = 0; i < numNPCs && i < safePathPoints.length; i++) {
+        // Use collision-aware placement
+        const position = findValidPosition(safePathPoints, objects, 20, 100);
+
+        // Skip if we couldn't find a valid position
+        if (!position) continue;
+
+        // Generate story-aware NPC description (we'll use this in roomSpriteEnhancer)
+        // For now, use generic but mark for AI enhancement
+        const interactionText = storyContext
+          ? await generateNPCInteractionText('npc', roomNumber, storyContext, storyMode || 'inspiration')
+          : 'A traveler rests here';
+
+        objects.push({
+          id: `npc_${roomId}_${i}`,
+          position,
+          type: 'npc',
+          sprite: randomChoice(NPC_SPRITES),
+          interactionText,
+          hasInteracted: false,
+        });
+      }
     }
   }
 

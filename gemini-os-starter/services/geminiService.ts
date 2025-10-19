@@ -233,31 +233,38 @@ Return ONLY the JSON object, nothing else.`;
 
 /**
  * Generate a biome progression for the entire game based on story context
+ * Recreation mode: 5 rooms, Inspiration/Continuation: 20 rooms
  */
 export async function generateBiomeProgression(
   storyContext: string | null,
   storyMode: string,
-  numRooms: number = 20
+  numRooms?: number
 ): Promise<string[]> {
+  // CRITICAL: Recreation mode uses only 5 rooms
+  const roomCount = numRooms ?? (storyMode === 'recreation' ? 5 : 20);
   const model = 'gemini-2.5-flash-lite';
 
   if (!process.env.API_KEY) {
     // Fallback to default progression
-    return Array(numRooms).fill('forest');
+    return Array(roomCount).fill('forest');
   }
 
   const contextDescription = storyContext
-    ? `Story: "${storyContext.slice(0, 500)}..." (${storyMode} mode)`
+    ? `Story: "${storyContext.slice(0, 500)}..." (${storyMode} mode - ${roomCount} rooms)`
     : 'Generic fantasy adventure';
 
   const isFantasyStory = !storyContext ||
     /fantasy|magic|dragon|dungeon|medieval|sword|wizard|elf|dwarf/i.test(storyContext);
 
-  const prompt = `You are a game designer creating a ${numRooms}-room progression for a story-based game.
+  const recreationNote = storyMode === 'recreation'
+    ? `\n**RECREATION MODE (5 rooms):** Each location should represent a KEY STORY MOMENT from the narrative. Focus on the most important scenes.`
+    : '';
+
+  const prompt = `You are a game designer creating a ${roomCount}-room progression for a story-based game.
 
 ${contextDescription}
 
-IMPORTANT: Create location names that FIT THE STORY CONTEXT!
+IMPORTANT: Create location names that FIT THE STORY CONTEXT!${recreationNote}
 
 ${isFantasyStory ? `
 For fantasy stories, you can use these pre-made biomes:
@@ -280,11 +287,12 @@ Create a logical progression that:
 
 Use UNDERSCORES for multi-word locations (e.g., "training_ground", "world_cup_final", "local_stadium")
 
-Return ONLY a JSON array of exactly ${numRooms} location names:
+Return ONLY a JSON array of exactly ${roomCount} location names:
 ["location1", "location2", "location3", ...]
 
-Example for "Lionel Messi winning World Cup":
-["training_ground", "practice_match", "local_stadium", "national_league", "champions_league", "world_cup_qualifier", "group_stage", "knockout_round", "quarterfinal", "semifinal", "world_cup_final"]`;
+${storyMode === 'recreation' ? `Example for "Lionel Messi winning World Cup" (5 rooms):
+["training_facility", "opening_match_defeat", "knockout_rounds", "world_cup_final", "victory_celebration"]` : `Example for "Lionel Messi winning World Cup" (20 rooms):
+["training_ground", "practice_match", "local_stadium", "national_league", "champions_league", "world_cup_qualifier", "group_stage", "knockout_round", "quarterfinal", "semifinal", "world_cup_final"]`}`;
 
   try {
     console.log('[GeminiService] Generating biome progression...');
@@ -305,15 +313,15 @@ Example for "Lionel Messi winning World Cup":
 
     const progression: string[] = JSON.parse(jsonMatch[0]);
 
-    // Ensure we have exactly numRooms
-    if (progression.length < numRooms) {
+    // Ensure we have exactly roomCount
+    if (progression.length < roomCount) {
       // Pad with last biome
-      while (progression.length < numRooms) {
+      while (progression.length < roomCount) {
         progression.push(progression[progression.length - 1]);
       }
-    } else if (progression.length > numRooms) {
+    } else if (progression.length > roomCount) {
       // Trim to exact size
-      progression.length = numRooms;
+      progression.length = roomCount;
     }
 
     console.log(`[GeminiService] Generated progression: ${progression.slice(0, 5).join(', ')}...`);
