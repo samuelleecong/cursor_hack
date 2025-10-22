@@ -7,7 +7,20 @@
 export interface GameEvent {
   id: string;
   timestamp: number;
-  type: 'combat' | 'dialogue' | 'loot' | 'exploration' | 'death' | 'levelup' | 'choice' | 'battle_start' | 'battle_end' | 'npc_interaction' | 'item_acquired' | 'room_entered';
+  type:
+    | 'combat'
+    | 'dialogue'
+    | 'loot'
+    | 'exploration'
+    | 'death'
+    | 'levelup'
+    | 'choice'
+    | 'battle_start'
+    | 'battle_end'
+    | 'npc_interaction'
+    | 'item_acquired'
+    | 'room_entered'
+    | 'story_scene';
   roomId: string;
   playerLevel: number;
   playerHP: number;
@@ -140,6 +153,7 @@ class EventLoggerService {
     const npcEvents = recentEvents.filter(e => e.type === 'npc_interaction' || e.type === 'dialogue');
     const lootEvents = recentEvents.filter(e => e.type === 'loot' || e.type === 'item_acquired');
     const choiceEvents = recentEvents.filter(e => e.type === 'choice');
+    const storyScenes = recentEvents.filter(e => e.type === 'story_scene');
 
     const contextParts = [];
 
@@ -166,6 +180,16 @@ class EventLoggerService {
         return `  - ${choiceText} (${consequenceType})`;
       });
       contextParts.push(`Recent Choices:\n${recentChoices.join('\n')}`);
+    }
+
+    if (storyScenes.length > 0) {
+      const recentScenes = storyScenes.slice(-3).map(scene => {
+        const summary = scene.description.length > 180
+          ? `${scene.description.slice(0, 177)}...`
+          : scene.description;
+        return `  - ${summary}`;
+      });
+      contextParts.push(`Story Progress:\n${recentScenes.join('\n')}`);
     }
 
     if (lootEvents.length > 0) {

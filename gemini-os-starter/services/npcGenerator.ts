@@ -3,9 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /* tslint:disable */
-import {GoogleGenAI} from '@google/genai';
-
-const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
+import {getGeminiClient, GEMINI_MODELS, trackApiRequest} from './config/geminiClient';
 
 /**
  * Generate a story-aware NPC description for a given room
@@ -16,7 +14,7 @@ export async function generateNPCDescription(
   storyContext: string | null,
   storyMode: 'inspiration' | 'recreation' | 'continuation' = 'inspiration'
 ): Promise<string> {
-  const model = 'gemini-2.5-flash-lite';
+  const model = GEMINI_MODELS.FLASH_LITE;
 
   if (!storyContext) {
     // No story context, return generic
@@ -42,11 +40,12 @@ IMPORTANT RULES:
 - Late rooms (16+): Significant figures, final challenges, climactic encounters (legendary coaches, iconic rivals)
 
 Return ONLY a brief NPC description (2-4 words) suitable for sprite generation.
-Examples: "wise mentor", "rival competitor", "supportive coach", "mysterious guide", "challenging opponent", "eager fan", "team captain"
+Examples: "wise mentor", "rival competitor", "supportive coach", "strategic advisor", "challenging opponent", "eager fan", "team captain"
 
 NPC Description:`;
 
   try {
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
@@ -78,7 +77,7 @@ export async function generateEnemyDescription(
   storyContext: string | null,
   storyMode: 'inspiration' | 'recreation' | 'continuation' = 'inspiration'
 ): Promise<string> {
-  const model = 'gemini-2.5-flash-lite';
+  const model = GEMINI_MODELS.FLASH_LITE;
 
   if (!storyContext) {
     return `hostile creature, ${biome} monster`;
@@ -107,6 +106,8 @@ Examples: "aggressive defender", "rival striker", "challenging obstacle", "fierc
 Enemy Description:`;
 
   try {
+    trackApiRequest(model); // Track for rate limiting
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
@@ -136,7 +137,7 @@ export async function generateNPCInteractionText(
   storyContext: string | null,
   storyMode: 'inspiration' | 'recreation' | 'continuation' = 'inspiration'
 ): Promise<string> {
-  const model = 'gemini-2.5-flash-lite';
+  const model = GEMINI_MODELS.FLASH_LITE;
 
   if (!storyContext) {
     return 'A traveler rests here';
@@ -159,6 +160,8 @@ Examples:
 Interaction Text:`;
 
   try {
+    trackApiRequest(model); // Track for rate limiting
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,

@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /* tslint:disable */
-import { GoogleGenAI } from '@google/genai';
 import { Room, StoryMode, GameObject } from '../types';
 import { BiomeType, TileMap } from './mapGenerator';
 import { slicePanoramaImage, createFallbackScene } from '../utils/imageSlicing';
@@ -11,12 +10,7 @@ import { getCachedImage, cacheImage } from '../utils/imageCache';
 import { generatePixelArt } from './falService';
 import { tileMapToReferenceImage, resizeTileMapReference, combineTileMapsAsPanorama, tileMapToBlob } from '../utils/tileMapToImage';
 import { USE_BIOME_FOR_IMAGES } from '../constants';
-
-if (!process.env.API_KEY) {
-  console.error('API_KEY environment variable is not set for scene generation.');
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+import {getGeminiClient, GEMINI_MODELS} from './config/geminiClient';
 
 export interface SceneGenerationParams {
   roomId: string;
@@ -48,11 +42,11 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
 
   // Biome descriptions - STYLE ONLY, no layout (fallback for legacy biomes)
   const biomeDescriptions: Record<BiomeType, string> = {
-    forest: 'lush forest with ancient trees, moss-covered stones, dappled sunlight filtering through leaves',
-    plains: 'open grasslands with rolling hills, wildflowers, and distant mountains in soft focus',
-    desert: 'sandy terrain with scattered cacti, rocky outcrops, and shimmering heat haze',
-    cave: 'dark cavern with stalactites, underground pools, and glowing crystals casting ethereal light',
-    dungeon: 'ancient stone corridors with flickering torches, crumbling walls, and mysterious shadows',
+    forest: 'lush parkland with tall trees, mossy boulders, and soft sunlight cutting through the canopy',
+    plains: 'open grasslands with gentle hills, native plants, and distant skylines in soft focus',
+    desert: 'arid terrain with wind-swept dunes, hardy shrubs, and shimmering heat haze',
+    cave: 'subterranean tunnels with reinforced rock walls, industrial lighting, and shallow reflective pools',
+    dungeon: 'industrial corridors with exposed pipes, emergency lighting, and maintenance equipment stacked along the walls',
   };
 
   // CRITICAL FIX: Use biomeDefinition.atmosphere if available (for story-aware custom biomes)
@@ -64,9 +58,9 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     console.log(`[SceneGen] Using custom biome atmosphere: ${biomeStyle}`);
   } else if (USE_BIOME_FOR_IMAGES) {
     // Fallback to hardcoded descriptions for legacy biomes
-    biomeStyle = biomeDescriptions[biome] || 'generic fantasy RPG environment';
+    biomeStyle = biomeDescriptions[biome] || 'generic game environment';
   } else {
-    biomeStyle = 'generic fantasy RPG environment';
+    biomeStyle = 'generic game environment';
   }
 
   // Summarize objects - VISUAL STYLE, not placement
@@ -94,6 +88,9 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
       inspiration: 'Capture the color palette, mood, and aesthetic themes. Every visual must feel authentic to this setting.',
     };
 
+    const fantasySignals = /(wizard|magic|spell|dragon|sorcerer|witch|mage|necromancer|demon|ghost|spirit|specter|enchanted|paladin|elf|dwarf|orc|goblin)/i;
+    const isExplicitFantasy = fantasySignals.test(storyContext);
+
     storySection = `
 **CRITICAL STORY CONTEXT (${storyMode || 'inspiration'} mode):**
 "${storyContext.substring(0, 400)}..."
@@ -101,6 +98,12 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
 MANDATORY REQUIREMENT: The visual style MUST reflect this specific story setting, NOT generic fantasy.
 ${modeInstructions[storyMode || 'inspiration']}
 If this is a modern, sports, sci-fi, or non-fantasy setting, DO NOT use medieval/fantasy visuals.
+${!isExplicitFantasy ? `
+ABSOLUTE RESTRICTION: This narrative contains no supernatural or magical elements.
+- Avoid ghosts, spirits, glowing runes, magical auras, floating particles, or mythic creatures.
+- Use real-world lighting sources (stadium lights, office fixtures, street lamps, etc.).
+- Architecture, props, and costumes must belong to the story's actual genre and era.
+` : ''}
 `;
   }
 
@@ -165,8 +168,9 @@ export async function generateSingleRoomScene(
     console.log(`[SceneGen] Generating prompt for room ${roomId} using Gemini 2.5 Flash...`);
 
     // Use Gemini 2.5 Flash for prompt generation (15 req/min vs Pro's 2 req/min)
+    const ai = getGeminiClient();
     const response = await ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.FLASH,
       contents: promptRequest,
       config: {},
     });
@@ -237,14 +241,15 @@ export async function generateScenePanorama(
     console.log(`[SceneGen] Generating panorama prompts for rooms ${currentRoomParams.roomId} + ${nextRoomParams.roomId}...`);
 
     // Generate prompts using Gemini 2.5 Flash (15 req/min vs Pro's 2 req/min)
+    const ai = getGeminiClient();
     const currentResponsePromise = ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.FLASH,
       contents: currentPromptRequest,
       config: {},
     });
 
     const nextResponsePromise = ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.FLASH,
       contents: nextPromptRequest,
       config: {},
     });
@@ -311,9 +316,12 @@ Seamlessly blended artistic styles with unified lighting and color harmony. Natu
   } catch (error) {
     console.error('[SceneGen] Failed to generate panorama:', error);
 
-    // Fallback: Generate individual scenes
-    const currentScene = await generateSingleRoomScene(currentRoomParams);
-    const nextScene = await generateSingleRoomScene(nextRoomParams);
+    // Fallback: Generate individual scenes in parallel for faster recovery
+    console.log('[SceneGen] Generating fallback scenes in parallel...');
+    const [currentScene, nextScene] = await Promise.all([
+      generateSingleRoomScene(currentRoomParams),
+      generateSingleRoomScene(nextRoomParams)
+    ]);
 
     return { currentScene, nextScene };
   }

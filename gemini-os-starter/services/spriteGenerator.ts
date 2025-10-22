@@ -30,7 +30,7 @@ export interface GeneratedSprite {
   cached: boolean;
 }
 
-const SPRITE_STYLE = 'pixel art sprite, 32x32 pixels, 16-bit SNES style, retro RPG aesthetic, consistent pixel art style, NO BACKGROUND, transparent background, isolated sprite, game asset, clean crisp edges, simple iconic design, top-down view, cohesive art direction';
+const SPRITE_STYLE = 'pixel art sprite, 32x32 pixels, 16-bit SNES style, retro game aesthetic, consistent pixel art style, NO BACKGROUND, transparent background, isolated sprite, game asset, clean crisp edges, simple iconic design, top-down view, cohesive art direction';
 
 function buildSpritePrompt(params: SpriteGenerationParams): string {
   const { description, type, biome, storyContext } = params;

@@ -3,21 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 /* tslint:disable */
-import {GoogleGenAI} from '@google/genai';
 import {getSystemPrompt} from '../constants';
 import {InteractionData} from '../types';
 import {BiomeDefinition} from '../types/biomes';
 import {eventLogger} from './eventLogger';
-
-if (!process.env.API_KEY) {
-  // This is a critical error. In a real app, you might throw or display a persistent error.
-  // For this environment, logging to console is okay, but the app might not function.
-  console.error(
-    'API_KEY environment variable is not set. The application will not be able to connect to the Gemini API.',
-  );
-}
-
-const ai = new GoogleGenAI({apiKey: process.env.API_KEY!}); // The "!" asserts API_KEY is non-null after the check.
+import {getGeminiClient, GEMINI_MODELS, isApiKeyConfigured, getApiKeyErrorMessage} from './config/geminiClient';
 
 export async function* streamAppContent(
   interactionHistory: InteractionData[],
@@ -34,13 +24,10 @@ export async function* streamAppContent(
     appearance: string;
   }
 ): AsyncGenerator<string, void, void> {
-  const model = 'gemini-2.5-flash-lite'; // Updated model
+  const model = GEMINI_MODELS.FLASH_LITE;
 
-  if (!process.env.API_KEY) {
-    yield `<div class="p-4 text-red-700 bg-red-100 rounded-lg">
-      <p class="font-bold text-lg">Configuration Error</p>
-      <p class="mt-2">The API_KEY is not configured. Please set the API_KEY environment variable.</p>
-    </div>`;
+  if (!isApiKeyConfigured()) {
+    yield getApiKeyErrorMessage();
     return;
   }
 
@@ -103,9 +90,10 @@ ${historyPromptSegment}
 Full Context for Current Interaction (for your reference):
 ${JSON.stringify(currentInteraction, null, 1)}
 
-Generate the HTML content for the game story scene:`;
+Return ONLY the JSON object for the game story scene:`;
 
   try {
+    const ai = getGeminiClient();
     const response = await ai.models.generateContentStream({
       model: model,
       contents: fullPrompt,
@@ -153,9 +141,9 @@ export async function generateBiomeWithAI(
   biomeName: string,
   storyContext: string
 ): Promise<BiomeDefinition> {
-  const model = 'gemini-2.5-flash-lite';
+  const model = GEMINI_MODELS.FLASH_LITE;
 
-  if (!process.env.API_KEY) {
+  if (!isApiKeyConfigured()) {
     throw new Error('API_KEY not configured');
   }
 
@@ -194,6 +182,7 @@ Return ONLY the JSON object, nothing else.`;
   try {
     console.log(`[GeminiService] Generating biome: ${biomeName}`);
 
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
@@ -242,9 +231,9 @@ export async function generateBiomeProgression(
 ): Promise<string[]> {
   // CRITICAL: Recreation mode uses only 5 rooms
   const roomCount = numRooms ?? (storyMode === 'recreation' ? 5 : 20);
-  const model = 'gemini-2.5-flash-lite';
+  const model = GEMINI_MODELS.FLASH_LITE;
 
-  if (!process.env.API_KEY) {
+  if (!isApiKeyConfigured()) {
     // Fallback to default progression
     return Array(roomCount).fill('forest');
   }
@@ -297,6 +286,7 @@ ${storyMode === 'recreation' ? `Example for "Lionel Messi winning World Cup" (5 
   try {
     console.log('[GeminiService] Generating biome progression...');
 
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,

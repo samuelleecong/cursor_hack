@@ -15,7 +15,7 @@ fal.config({
   credentials: falKey,
 });
 
-const PIXEL_ART_STYLE = '16-bit pixel art, top-down view, RPG game sprite, Stardew Valley style, retro gaming aesthetic';
+const PIXEL_ART_STYLE = '16-bit pixel art, top-down view, game sprite, Stardew Valley style, retro gaming aesthetic';
 const NEGATIVE_PROMPT = 'blurry, 3D, realistic, photograph, low quality, modern, detailed shading';
 
 export interface ImageGenerationParams {

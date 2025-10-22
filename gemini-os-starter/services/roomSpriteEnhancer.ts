@@ -31,72 +31,79 @@ export async function enhanceRoomWithSprites(
   console.log(`[RoomSpriteEnhancer] 🎨 Starting sprite enhancement for ${room.id} with ${room.objects.length} objects`);
   console.log(`[RoomSpriteEnhancer] Biome: ${biome}, Story context: ${storyContext ? 'Yes' : 'No'}`);
 
-  const enhancedObjects: GameObject[] = [];
   const extractedRoomNumber = roomNumber ?? parseInt(room.id.split('_')[1] || '0');
+  const startTime = performance.now();
 
-  for (const obj of room.objects) {
-    if (obj.spriteUrl) {
-      console.log(`[RoomSpriteEnhancer] ✓ ${obj.type} ${obj.id} already has sprite, skipping`);
-      enhancedObjects.push(obj);
-      continue;
-    }
-
-    console.log(`[RoomSpriteEnhancer] 🖼️ Generating sprite for ${obj.type} ${obj.id} (emoji: ${obj.sprite})...`);
-    const enhancedObj = { ...obj };
-
-    try {
-      if (obj.type === 'enemy') {
-        // Generate story-aware enemy description
-        const enemyDescription = await generateEnemyDescription(
-          extractedRoomNumber,
-          biome,
-          obj.enemyLevel || 1,
-          storyContext,
-          storyMode || 'inspiration'
-        );
-        const sprite = await generateEnemySprite(
-          enemyDescription,
-          biome,
-          obj.enemyLevel || 1,
-          obj.sprite,
-          storyContext || undefined
-        );
-        enhancedObj.spriteUrl = sprite.url || undefined;
-        console.log(`[RoomSpriteEnhancer] ✅ Enemy sprite generated: ${sprite.url?.substring(0, 60)}...`);
-      } else if (obj.type === 'npc') {
-        // Generate story-aware NPC description
-        const npcDescription = await generateNPCDescription(
-          extractedRoomNumber,
-          biome,
-          storyContext,
-          storyMode || 'inspiration'
-        );
-        const sprite = await generateNPCSprite(
-          npcDescription,
-          biome,
-          obj.sprite,
-          storyContext || undefined
-        );
-        enhancedObj.spriteUrl = sprite.url || undefined;
-        console.log(`[RoomSpriteEnhancer] ✅ NPC sprite generated: ${sprite.url?.substring(0, 60)}...`);
-      } else if (obj.type === 'item') {
-        const itemDescription = 'treasure, collectible';
-        const sprite = await generateItemSprite(
-          itemDescription,
-          'glowing game item',
-          obj.sprite,
-          biome
-        );
-        enhancedObj.spriteUrl = sprite.url || undefined;
-        console.log(`[RoomSpriteEnhancer] ✅ Item sprite generated: ${sprite.url?.substring(0, 60)}...`);
+  // Process all objects in parallel for significantly faster sprite generation
+  console.log(`[RoomSpriteEnhancer] 🚀 Generating sprites in parallel...`);
+  const enhancedObjects = await Promise.all(
+    room.objects.map(async (obj) => {
+      // Skip if already has sprite
+      if (obj.spriteUrl) {
+        console.log(`[RoomSpriteEnhancer] ✓ ${obj.type} ${obj.id} already has sprite, skipping`);
+        return obj;
       }
-    } catch (error) {
-      console.error(`[RoomSpriteEnhancer] ❌ Failed to generate sprite for ${obj.type} ${obj.id}:`, error);
-      console.error(`[RoomSpriteEnhancer] 🔄 Object will use emoji fallback: ${obj.sprite}`);
-    }
 
-    enhancedObjects.push(enhancedObj);
-  }
+      console.log(`[RoomSpriteEnhancer] 🖼️ Generating sprite for ${obj.type} ${obj.id} (emoji: ${obj.sprite})...`);
+      const enhancedObj = { ...obj };
+
+      try {
+        if (obj.type === 'enemy') {
+          // Generate story-aware enemy description
+          const enemyDescription = await generateEnemyDescription(
+            extractedRoomNumber,
+            biome,
+            obj.enemyLevel || 1,
+            storyContext,
+            storyMode || 'inspiration'
+          );
+          const sprite = await generateEnemySprite(
+            enemyDescription,
+            biome,
+            obj.enemyLevel || 1,
+            obj.sprite,
+            storyContext || undefined
+          );
+          enhancedObj.spriteUrl = sprite.url || undefined;
+          console.log(`[RoomSpriteEnhancer] ✅ Enemy sprite generated: ${sprite.url?.substring(0, 60)}...`);
+        } else if (obj.type === 'npc') {
+          // Generate story-aware NPC description
+          const npcDescription = await generateNPCDescription(
+            extractedRoomNumber,
+            biome,
+            storyContext,
+            storyMode || 'inspiration'
+          );
+          const sprite = await generateNPCSprite(
+            npcDescription,
+            biome,
+            obj.sprite,
+            storyContext || undefined
+          );
+          enhancedObj.spriteUrl = sprite.url || undefined;
+          console.log(`[RoomSpriteEnhancer] ✅ NPC sprite generated: ${sprite.url?.substring(0, 60)}...`);
+        } else if (obj.type === 'item') {
+          const itemDescription = 'treasure, collectible';
+          const sprite = await generateItemSprite(
+            itemDescription,
+            'glowing game item',
+            obj.sprite,
+            biome
+          );
+          enhancedObj.spriteUrl = sprite.url || undefined;
+          console.log(`[RoomSpriteEnhancer] ✅ Item sprite generated: ${sprite.url?.substring(0, 60)}...`);
+        }
+      } catch (error) {
+        console.error(`[RoomSpriteEnhancer] ❌ Failed to generate sprite for ${obj.type} ${obj.id}:`, error);
+        console.error(`[RoomSpriteEnhancer] 🔄 Object will use emoji fallback: ${obj.sprite}`);
+      }
+
+      return enhancedObj;
+    })
+  );
+
+  const duration = performance.now() - startTime;
+  console.log(`[RoomSpriteEnhancer] ⚡ Parallel sprite generation completed in ${duration.toFixed(0)}ms`);
 
   const spriteUrls = enhancedObjects
     .map(obj => obj.spriteUrl)
@@ -136,6 +143,7 @@ export async function enhanceObjectWithSprite(
 
   try {
     if (obj.type === 'enemy') {
+      // Parallel: description and sprite generation could be sequential, but description is needed for sprite
       const enemyDescription = await generateEnemyDescription(
         roomNumber || 0,
         biome,
@@ -152,6 +160,7 @@ export async function enhanceObjectWithSprite(
       );
       enhanced.spriteUrl = sprite.url || undefined;
     } else if (obj.type === 'npc') {
+      // Parallel: description and sprite generation could be sequential, but description is needed for sprite
       const npcDescription = await generateNPCDescription(
         roomNumber || 0,
         biome,

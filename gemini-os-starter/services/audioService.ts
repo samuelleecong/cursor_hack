@@ -10,10 +10,7 @@ import {
 } from '../types/audio';
 import { generateRoomMusic, generateBattleMusic, generateStoryMusic } from './falAudioClient';
 import { audioCache } from './audioCache';
-import { GoogleGenAI } from '@google/genai';
-
-// Initialize Gemini client for music description generation
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+import {getGeminiClient, GEMINI_MODELS} from './config/geminiClient';
 
 // Cache for LLM-generated music descriptions
 const musicDescriptionCache = new Map<string, { genre: string; mood: string }>();
@@ -38,8 +35,9 @@ Respond ONLY with a JSON object in this exact format (no other text):
   "mood": "mood description with 2-3 adjectives (e.g., 'mysterious, ancient', 'dark, ominous', 'hopeful, bright', etc.)"
 }`;
 
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE,
       contents: prompt,
       config: {},
     });
@@ -57,7 +55,7 @@ Respond ONLY with a JSON object in this exact format (no other text):
 
     const parsed = JSON.parse(jsonText);
     const result = {
-      genre: parsed.genre || 'fantasy adventure',
+      genre: parsed.genre || 'cinematic adventure',
       mood: parsed.mood || 'atmospheric, mysterious',
     };
 
@@ -80,7 +78,7 @@ Respond ONLY with a JSON object in this exact format (no other text):
  * Extract genre/theme from story context (fallback method)
  */
 const extractGenre = (storyContext: string | null): string => {
-  if (!storyContext) return 'fantasy';
+  if (!storyContext) return 'cinematic adventure';
 
   const text = storyContext.toLowerCase();
 
@@ -119,12 +117,12 @@ const extractGenre = (storyContext: string | null): string => {
     return 'historical drama';
   }
 
-  // Check for fantasy keywords before defaulting
+  // Check for fantasy keywords as one of many genre options (not default)
   if (text.includes('fantasy') || text.includes('magic') || text.includes('wizard') || text.includes('elf') || text.includes('dwarf')) {
     return 'fantasy adventure';
   }
 
-  return 'cinematic drama';
+  return 'cinematic adventure';
 };
 
 /**
@@ -225,7 +223,7 @@ const buildRoomMusicPrompt = async (context: MusicGenerationContext): Promise<st
   const intensity = getIntensityFromHP(context.playerHP, context.maxHP);
   const moralTheme = getMoralTheme(context.recentConsequences);
 
-  const roomDesc = context.currentRoom?.description || 'mysterious chamber';
+  const roomDesc = context.currentRoom?.description || 'staging area';
   const roomType = context.currentRoom?.type || context.currentRoom?.biome || 'location';
 
   // Story mode adaptation

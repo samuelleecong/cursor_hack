@@ -3,9 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /* tslint:disable */
-import { GoogleGenAI } from '@google/genai';
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+import {getGeminiClient, GEMINI_MODELS, isApiKeyConfigured} from './config/geminiClient';
 
 export interface StoryBeat {
   roomNumber: number;
@@ -160,15 +158,16 @@ Now analyze the provided story and return the JSON structure.
  * Analyze a story and extract its structure for recreation mode
  */
 export async function analyzeStoryStructure(storyContext: string): Promise<StoryStructure> {
-  if (!process.env.API_KEY) {
+  if (!isApiKeyConfigured()) {
     throw new Error('API_KEY not configured');
   }
 
   console.log('[StoryStructure] Analyzing story structure for recreation mode...');
 
-  const model = 'gemini-2.0-flash-exp';
+  const model = GEMINI_MODELS.FLASH_EXP;
 
   try {
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: STORY_ANALYSIS_PROMPT(storyContext),

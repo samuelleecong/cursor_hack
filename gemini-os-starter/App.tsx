@@ -65,6 +65,12 @@ const calculateLevelUp = (currentLevel: number): number => {
   return Math.floor(100 * Math.pow(1.5, currentLevel - 1));
 };
 
+const XP_REWARDS = {
+  narrativeInteraction: 20,
+  lootDiscovery: 15,
+  itemAcquired: 25,
+};
+
 const App: React.FC = () => {
   useEffect(() => {
     (window as any).eventLogger = eventLogger;
@@ -465,6 +471,71 @@ const App: React.FC = () => {
 
   const handleScreenExit = useCallback(
     async (direction: 'right' | 'left' | 'up' | 'down') => {
+      if (gameState.storyMode === 'recreation' && gameState.storyRecreation) {
+        const storyBeats = gameState.storyRecreation.storyStructure?.storyBeats || [];
+        const finalBeatIndex = storyBeats.length > 0 ? storyBeats.length - 1 : -1;
+        const reachedEndOfStory = finalBeatIndex >= 0 && gameState.roomCounter >= finalBeatIndex;
+
+        if (reachedEndOfStory) {
+          const completionMessage = 'The story recreation has reached its finale. Return to the desktop to begin a new tale.';
+
+          eventLogger.logEvent(
+            'exploration',
+            gameState.currentRoomId,
+            gameState.level,
+            gameState.currentHP,
+            completionMessage,
+            { directionAttempted: direction }
+          );
+
+          setRoomGenerationProgress(100);
+          setRoomGenerationStep('Story complete');
+
+          setGameState((prev) => {
+            if (!prev.storyRecreation) {
+              return {
+                ...prev,
+                isGeneratingRoom: false,
+                currentAnimation: {
+                  type: 'dialogue',
+                  text: completionMessage,
+                  timestamp: Date.now(),
+                },
+              };
+            }
+
+            const completedBeats = prev.storyRecreation.completedBeats.includes(finalBeatIndex)
+              ? prev.storyRecreation.completedBeats
+              : [...prev.storyRecreation.completedBeats, finalBeatIndex];
+
+            const alignmentScore = calculateStoryAlignment(
+              prev.storyRecreation.storyStructure,
+              prev.roomCounter,
+              completedBeats,
+              prev.storyRecreation.metCharacters
+            );
+
+            return {
+              ...prev,
+              isGeneratingRoom: false,
+              storyRecreation: {
+                ...prev.storyRecreation,
+                completedBeats,
+                currentBeatObjective: null,
+                alignmentScore,
+              },
+              currentAnimation: {
+                type: 'dialogue',
+                text: completionMessage,
+                timestamp: Date.now(),
+              },
+            };
+          });
+
+          return;
+        }
+      }
+
       setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
       setRoomGenerationProgress(0);
       setRoomGenerationStep('Analyzing story context...');
@@ -677,7 +748,19 @@ const App: React.FC = () => {
       // Pre-generate next room pair (N+1 and N+2) in the background
       triggerRoomPairPreGeneration(newRoomCounter, newRoom?.description);
     },
-    [gameState.roomCounter, gameState.rooms, gameState.currentRoomId, gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression, gameState.level, gameState.currentHP, triggerRoomPairPreGeneration],
+    [
+      gameState.roomCounter,
+      gameState.rooms,
+      gameState.currentRoomId,
+      gameState.storySeed,
+      gameState.storyContext,
+      gameState.storyMode,
+      gameState.storyRecreation,
+      gameState.biomeProgression,
+      gameState.level,
+      gameState.currentHP,
+      triggerRoomPairPreGeneration
+    ],
   );
 
   // Handle adding experience and leveling up
@@ -806,6 +889,47 @@ const App: React.FC = () => {
           }
 
           setSceneData(parsedScene);
+
+          const sceneSummary = parsedScene.scene?.trim();
+          if (sceneSummary) {
+            eventLogger.logEvent(
+              'story_scene',
+              gameState.currentRoomId,
+              gameState.level,
+              updatedHP ?? gameState.currentHP,
+              sceneSummary,
+              interactingObject
+                ? interactingObject.type === 'enemy'
+                  ? {
+                      enemyId: interactingObject.id,
+                      enemyName: interactingObject.interactionText,
+                    }
+                  : {
+                      npcId: interactingObject.id,
+                      npcName: interactingObject.interactionText,
+                    }
+                : undefined,
+            );
+
+            const truncatedScene =
+              sceneSummary.length > 280 ? `${sceneSummary.slice(0, 277)}...` : sceneSummary;
+
+            setInteractionHistory((prev) => {
+              if (prev[0]?.type === 'ai_scene' && prev[0]?.elementText === truncatedScene) {
+                return prev;
+              }
+
+              const sceneInteraction: InteractionData = {
+                id: `scene_${Date.now()}`,
+                type: 'ai_scene',
+                elementText: truncatedScene,
+                elementType: 'ai_scene',
+                appContext: 'roguelike_game',
+              };
+
+              return [sceneInteraction, ...prev].slice(0, maxHistoryLength);
+            });
+          }
         } catch (parseError) {
           console.error('Failed to parse JSON:', parseError);
           console.log('Raw content:', accumulatedContent);
@@ -828,9 +952,21 @@ const App: React.FC = () => {
       const eventMessage = object.type === 'enemy' 
         ? `Started battle with ${object.interactionText}`
         : `Interacted with ${object.interactionText}`;
-      const eventData = object.type === 'enemy'
-        ? { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
-        : { npcId: object.id, npcName: object.interactionText };
+      const shouldGrantInteractionXP = (object.type === 'npc' || object.type === 'item') && !object.hasInteracted;
+      const eventData =
+        object.type === 'enemy'
+          ? { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
+          : object.type === 'item'
+          ? {
+              itemId: object.id,
+              itemName: object.interactionText,
+              ...(shouldGrantInteractionXP ? { xpGained: XP_REWARDS.narrativeInteraction } : {}),
+            }
+          : {
+              npcId: object.id,
+              npcName: object.interactionText,
+              ...(shouldGrantInteractionXP ? { xpGained: XP_REWARDS.narrativeInteraction } : {}),
+            };
 
       eventLogger.logEvent(
         eventType,
@@ -906,6 +1042,10 @@ const App: React.FC = () => {
         return {...prev, rooms: newRooms, storyRecreation: updatedStoryRecreation};
       });
 
+      if (shouldGrantInteractionXP) {
+        handleAddExperience(XP_REWARDS.narrativeInteraction);
+      }
+
       const interactionData: InteractionData = {
         id: object.id,
         type: object.type,
@@ -927,7 +1067,7 @@ const App: React.FC = () => {
 
       internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, gameState.currentRoomId, gameState.level, gameState.currentHP],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, handleAddExperience, gameState.currentRoomId, gameState.level, gameState.currentHP],
   );
 
   const handleCombatChoice = useCallback(
@@ -1032,14 +1172,17 @@ const App: React.FC = () => {
           },
         }));
       } else if (choiceType === 'loot') {
+        const lootXP = XP_REWARDS.lootDiscovery;
         eventLogger.logEvent(
           'loot',
           gameState.currentRoomId,
           gameState.level,
           gameState.currentHP,
           choiceText,
-          { choiceId, choiceType }
+          { choiceId, choiceType, xpGained: lootXP }
         );
+
+        handleAddExperience(lootXP);
 
         setGameState((prev) => ({
           ...prev,
@@ -1115,7 +1258,7 @@ const App: React.FC = () => {
       // Start LLM request immediately (runs in background)
       internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP, currentInteractingObject);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter, currentInteractingObject, gameState.currentRoomId],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, handleAddExperience, sceneData, gameState.currentHP, gameState.selectedCharacter, currentInteractingObject, gameState.currentRoomId],
   );
 
   const handleBattleAction = useCallback((action: string) => {
@@ -1257,9 +1400,12 @@ const App: React.FC = () => {
               `Found ${gameState.battleState.enemy.itemDrop.name}`,
               { 
                 itemId: gameState.battleState.enemy.itemDrop.id,
-                itemName: gameState.battleState.enemy.itemDrop.name 
+                itemName: gameState.battleState.enemy.itemDrop.name,
+                xpGained: XP_REWARDS.itemAcquired,
               }
             );
+
+            handleAddExperience(XP_REWARDS.itemAcquired);
 
             setGameState(prev => ({
               ...prev,

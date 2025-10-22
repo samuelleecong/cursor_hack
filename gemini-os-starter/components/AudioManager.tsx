@@ -81,9 +81,8 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
    * Load main theme after character selection
    */
   useEffect(() => {
-    // Don't load music if disabled
+    // Don't load music if disabled (no log spam)
     if (!musicEnabled) {
-      console.log('[AudioManager] Music disabled, skipping main theme load');
       return;
     }
 
@@ -100,9 +99,8 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
    * Handle battle state changes - layer battle music over main theme
    */
   useEffect(() => {
-    // Don't play battle music if music is disabled
+    // Don't play battle music if music is disabled (no log spam)
     if (!musicEnabled || !gameState.isInGame) {
-      console.log('[AudioManager] Music disabled or not in game, skipping battle music');
       return;
     }
 
@@ -138,9 +136,8 @@ export const AudioManager: React.FC<AudioManagerProps> = ({ gameState }) => {
    * Handle character death and restart - regenerate main theme on restart
    */
   useEffect(() => {
-    // Don't play defeat/restart music if music is disabled
+    // Don't play defeat/restart music if music is disabled (no log spam)
     if (!musicEnabled) {
-      console.log('[AudioManager] Music disabled, skipping defeat/restart music');
       return;
     }
 
