@@ -290,24 +290,27 @@ const App: React.FC = () => {
       pairGenerationPromise.then(async ({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
         console.log(`[App] Room pair generated, enhancing with sprites...`);
 
-        // Enhance both rooms with AI-generated sprites
-        const enhancedNextRoom = await enhanceRoomWithSprites(
-          nextRoom,
-          nextBiomeKey,
-          gameState.storyContext,
-          nextRoomCounter,
-          gameState.storyMode
-        );
+        // OPTIMIZATION: Enhance both rooms with AI-generated sprites IN PARALLEL
+        // Before: 30s + 30s = 60 seconds total
+        // After: max(30s, 30s) = 30 seconds total (50% faster!)
+        const [enhancedNextRoom, enhancedNextNextRoom] = await Promise.all([
+          enhanceRoomWithSprites(
+            nextRoom,
+            nextBiomeKey,
+            gameState.storyContext,
+            nextRoomCounter,
+            gameState.storyMode
+          ),
+          enhanceRoomWithSprites(
+            nextNextRoom,
+            nextNextBiomeKey,
+            gameState.storyContext,
+            nextNextRoomCounter,
+            gameState.storyMode
+          )
+        ]);
 
-        const enhancedNextNextRoom = await enhanceRoomWithSprites(
-          nextNextRoom,
-          nextNextBiomeKey,
-          gameState.storyContext,
-          nextNextRoomCounter,
-          gameState.storyMode
-        );
-
-        console.log(`[App] Sprites generated for pre-generated rooms`);
+        console.log(`[App] Sprites generated for pre-generated rooms (in parallel)`);
 
         // Save ENHANCED rooms to cache
         roomCache.saveRoom(enhancedNextRoom);
