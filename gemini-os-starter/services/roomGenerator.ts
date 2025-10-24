@@ -14,6 +14,10 @@ const ENEMY_SPRITES = ['⚠️', '🚨', '🏃', '🥊', '🎯', '📉', '🧱']
 const NPC_SPRITES = ['👨', '👩', '🧑‍💼', '🧑‍🎓', '🧑‍🏫', '🧑‍🔬', '🧑‍🚀', '🧑‍⚕️'];
 const ITEM_SPRITES = ['📦', '📘', '🧃', '🎒', '💼', '📊', '📝', '🔑'];
 
+// OPTIMIZATION: Memoization cache for story term extraction
+// Avoids repeated regex operations on the same story content
+const storyTermsCache = new Map<string, string[]>();
+
 function randomChoice<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -23,6 +27,17 @@ function randomInt(min: number, max: number): number {
 }
 
 function extractStoryTerms(storyContext: string | null, storyBeat?: any): string[] {
+  // Generate cache key from inputs
+  const beatTitle = storyBeat?.title || '';
+  const beatChars = storyBeat?.keyCharacters?.join(',') || '';
+  const contextSnippet = storyContext?.slice(0, 100) || '';
+  const cacheKey = `${beatTitle}|${beatChars}|${contextSnippet}`;
+
+  // Return cached result if available
+  if (storyTermsCache.has(cacheKey)) {
+    return storyTermsCache.get(cacheKey)!;
+  }
+
   const terms = new Set<string>();
 
   if (storyBeat?.keyCharacters?.length) {
@@ -55,7 +70,18 @@ function extractStoryTerms(storyContext: string | null, storyBeat?: any): string
     }
   }
 
-  return Array.from(terms);
+  const result = Array.from(terms);
+
+  // Cache the result for future calls
+  storyTermsCache.set(cacheKey, result);
+
+  // Limit cache size to prevent memory bloat
+  if (storyTermsCache.size > 50) {
+    const firstKey = storyTermsCache.keys().next().value;
+    storyTermsCache.delete(firstKey);
+  }
+
+  return result;
 }
 
 function buildStoryItem(

@@ -36,6 +36,7 @@ import {
 // Voice speech components
 import { VoiceControls } from './components/VoiceControls';
 import { speechService } from './services/speechService';
+import { preloadRoomAssets } from './utils/imagePreloader';
 
 // Track rooms currently being generated to prevent duplicate calls
 const generatingRooms = new Set<string>();
@@ -130,10 +131,17 @@ const App: React.FC = () => {
       // Stop any currently playing speech to prevent overlap
       speechService.stopSpeech();
 
-      // Slight delay to ensure UI is rendered
-      setTimeout(() => {
+      // OPTIMIZATION: Defer speech to idle time to prevent blocking interactions
+      // Uses requestIdleCallback if available, falls back to setTimeout
+      const deferredSpeak = () => {
         speechService.speak(sceneData.scene, 'narrator', 'neutral', true);
-      }, 100);
+      };
+
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(deferredSpeak, { timeout: 200 });
+      } else {
+        setTimeout(deferredSpeak, 100);
+      }
     }
   }, [sceneData?.scene, showAIDialog]);
 
@@ -148,10 +156,16 @@ const App: React.FC = () => {
       // Stop any currently playing speech
       speechService.stopSpeech();
 
-      // Delay to allow room transition
-      setTimeout(() => {
+      // OPTIMIZATION: Defer speech to idle time after room transition
+      const deferredSpeak = () => {
         speechService.speak(currentRoom.description, 'narrator', 'mysterious', true);
-      }, 300);
+      };
+
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(deferredSpeak, { timeout: 500 });
+      } else {
+        setTimeout(deferredSpeak, 300);
+      }
     }
   }, [gameState.currentRoomId, gameState.isInGame, showAIDialog, gameState.battleState]);
 
@@ -750,6 +764,31 @@ const App: React.FC = () => {
 
       // Pre-generate next room pair (N+1 and N+2) in the background
       triggerRoomPairPreGeneration(newRoomCounter, newRoom?.description);
+
+      // OPTIMIZATION: Preload next room's images in the background (idle time)
+      // Makes next room transition feel instant
+      const nextRoomId = `room_${newRoomCounter + 1}`;
+      const nextNextRoomId = `room_${newRoomCounter + 2}`;
+
+      // Check if next rooms are in cache/memory and preload their assets
+      setTimeout(() => {
+        const nextRoom = gameState.rooms.get(nextRoomId) || roomCache.getRoom(nextRoomId);
+        const nextNextRoom = gameState.rooms.get(nextNextRoomId) || roomCache.getRoom(nextNextRoomId);
+
+        if (nextRoom) {
+          const spriteUrls = nextRoom.objects.map(obj => obj.spriteUrl).filter((url): url is string => !!url);
+          preloadRoomAssets({ sceneImage: nextRoom.sceneImage, spriteUrls })
+            .then(() => console.log(`[Preloader] Next room ${nextRoomId} assets preloaded`))
+            .catch(() => {}); // Silent fail, not critical
+        }
+
+        if (nextNextRoom) {
+          const spriteUrls = nextNextRoom.objects.map(obj => obj.spriteUrl).filter((url): url is string => !!url);
+          preloadRoomAssets({ sceneImage: nextNextRoom.sceneImage, spriteUrls })
+            .then(() => console.log(`[Preloader] Room ${nextNextRoomId} assets preloaded`))
+            .catch(() => {});
+        }
+      }, 500); // Delay to let current room fully render first
     },
     [
       gameState.roomCounter,
