@@ -5,12 +5,17 @@
 /* tslint:disable */
 import * as fal from '@fal-ai/serverless-client';
 
-// Configure fal.ai with API key
+// Configure fal.ai with API key from environment variable
+const falKey = import.meta.env.VITE_FAL_KEY;
+if (!falKey) {
+  console.error('[falService] VITE_FAL_KEY not found in environment variables');
+}
+
 fal.config({
-  credentials: 'a2570e68-cecf-427f-bac2-8088260cf7cc:71a537235ff88639ac23425615b658ed',
+  credentials: falKey,
 });
 
-const PIXEL_ART_STYLE = '16-bit pixel art, top-down view, RPG game sprite, Stardew Valley style, retro gaming aesthetic';
+const PIXEL_ART_STYLE = '16-bit pixel art, top-down view, game sprite, Stardew Valley style, retro gaming aesthetic';
 const NEGATIVE_PROMPT = 'blurry, 3D, realistic, photograph, low quality, modern, detailed shading';
 
 export interface ImageGenerationParams {

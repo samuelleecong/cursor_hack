@@ -132,9 +132,9 @@ Your entire response must be a single, valid JSON object. Do not use markdown. D
 1.  **'imagePrompts' is REQUIRED.** Every JSON response you provide MUST include the 'imagePrompts' object.
 2.  **'background' is REQUIRED.** The 'imagePrompts.background' field MUST contain a detailed string for generating a background image. Do not leave it empty.
 3.  **'enemy' is REQUIRED for combat.** If the player is interacting with an enemy, the 'imagePrompts.enemy' field MUST contain a detailed string for generating the enemy sprite.
-4.  **Style Guide:** All image prompts must end with the phrase: ', 16-bit pixel art, top-down RPG style'.
-    *   *Background Example:* "A dark forest clearing with ancient trees and moss-covered stones, 16-bit pixel art, top-down RPG style"
-    *   *Enemy Example:* "A fierce goblin warrior with green skin and a rusty sword, 16-bit pixel art, top-down RPG style"
+4.  **Style Guide:** All image prompts must end with the phrase: ', 16-bit pixel art, top-down game style'.
+    *   *Background Example:* "A location appropriate to the story setting, 16-bit pixel art, top-down game style"
+    *   *Enemy Example:* "An opponent appropriate to the story context, 16-bit pixel art, top-down game style"
 
 ${existingVisualIdentity ? `
 **VISUAL CONSISTENCY REQUIREMENT - CRITICAL**

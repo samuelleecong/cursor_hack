@@ -23,6 +23,7 @@ import { generateRoomPair } from './services/roomPairGenerator';
 import { eventLogger } from './services/eventLogger';
 import { enhanceRoomWithSprites } from './services/roomSpriteEnhancer';
 import { roomCache } from './services/roomCache';
+import { analyzeStoryStructure, getStoryBeat, calculateStoryAlignment } from './services/storyStructureService';
 import {
   BattleAnimation,
   BattleState,
@@ -35,6 +36,7 @@ import {
 // Voice speech components
 import { VoiceControls } from './components/VoiceControls';
 import { speechService } from './services/speechService';
+import { preloadRoomAssets } from './utils/imagePreloader';
 
 // Track rooms currently being generated to prevent duplicate calls
 const generatingRooms = new Set<string>();
@@ -62,6 +64,12 @@ const calculateExperienceGain = (enemyLevel: number, playerLevel: number): numbe
 
 const calculateLevelUp = (currentLevel: number): number => {
   return Math.floor(100 * Math.pow(1.5, currentLevel - 1));
+};
+
+const XP_REWARDS = {
+  narrativeInteraction: 20,
+  lootDiscovery: 15,
+  itemAcquired: 25,
 };
 
 const App: React.FC = () => {
@@ -102,6 +110,7 @@ const App: React.FC = () => {
     inventory: [],
     storyConsequences: [],
     isGeneratingRoom: false,
+    storyRecreation: null,
   });
 
   const [sceneData, setSceneData] = useState<BattleSceneData | null>(null);
@@ -122,10 +131,17 @@ const App: React.FC = () => {
       // Stop any currently playing speech to prevent overlap
       speechService.stopSpeech();
 
-      // Slight delay to ensure UI is rendered
-      setTimeout(() => {
+      // OPTIMIZATION: Defer speech to idle time to prevent blocking interactions
+      // Uses requestIdleCallback if available, falls back to setTimeout
+      const deferredSpeak = () => {
         speechService.speak(sceneData.scene, 'narrator', 'neutral', true);
-      }, 100);
+      };
+
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(deferredSpeak, { timeout: 200 });
+      } else {
+        setTimeout(deferredSpeak, 100);
+      }
     }
   }, [sceneData?.scene, showAIDialog]);
 
@@ -140,10 +156,16 @@ const App: React.FC = () => {
       // Stop any currently playing speech
       speechService.stopSpeech();
 
-      // Delay to allow room transition
-      setTimeout(() => {
+      // OPTIMIZATION: Defer speech to idle time after room transition
+      const deferredSpeak = () => {
         speechService.speak(currentRoom.description, 'narrator', 'mysterious', true);
-      }, 300);
+      };
+
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(deferredSpeak, { timeout: 500 });
+      } else {
+        setTimeout(deferredSpeak, 300);
+      }
     }
   }, [gameState.currentRoomId, gameState.isInGame, showAIDialog, gameState.battleState]);
 
@@ -154,21 +176,54 @@ const App: React.FC = () => {
     setClassGenerationStep('analyzing');
 
     try {
-      // Step 1: Generate biome progression based on story context
-      setClassGenerationStep('world');
-      const biomeProgression = await generateBiomeProgression(story, mode, 20);
+      // Step 1: For Recreation Mode, analyze story structure FIRST
+      let storyStructure = null;
+      if (mode === 'recreation' && story) {
+        console.log('[App] 📖 Recreation mode - analyzing story structure...');
+        setClassGenerationStep('analyzing');
+        try {
+          storyStructure = await analyzeStoryStructure(story);
+          console.log('[App] ✅ Story structure analyzed:', storyStructure.storyTitle);
+        } catch (error) {
+          console.error('[App] ❌ Failed to analyze story structure:', error);
+          // Continue anyway, will use mode without structure
+        }
+      }
 
-      // Step 2: Generate character classes based on story and mode
+      // Step 2: Generate biome progression based on story context
+      // Recreation mode automatically gets 5 rooms
+      setClassGenerationStep('world');
+      const biomeProgression = await generateBiomeProgression(story, mode);
+      console.log(`[App] Generated ${biomeProgression.length} biomes for ${mode} mode`);
+
+      // Step 3: Generate character classes based on story and mode
       setClassGenerationStep('classes');
       const generatedClasses = await generateCharacterClasses(story, mode);
 
+      // Step 4: Initialize story recreation state if applicable
+      const storyRecreationState = mode === 'recreation' && storyStructure ? {
+        storyStructure,
+        completedBeats: [],
+        metCharacters: [],
+        currentBeatObjective: storyStructure.storyBeats[0]?.objective || null,
+        alignmentScore: 100, // Start at perfect alignment
+      } : null;
+
       // Update game state with story context and biome progression
-      setGameState((prev) => ({
+      setGameState((prev: any) => ({
         ...prev,
         storyContext: story,
         storyMode: mode,
         biomeProgression: biomeProgression,
+        storyRecreation: storyRecreationState,
       }));
+
+      if (storyRecreationState) {
+        console.log('[App] 🎭 Story Recreation initialized:');
+        console.log(`  - Story: ${storyStructure.storyTitle}`);
+        console.log(`  - Beats: ${storyStructure.storyBeats.map((b: any) => b.title).join(' → ')}`);
+        console.log(`  - Current Objective: ${storyRecreationState.currentBeatObjective}`);
+      }
 
       setAvailableClasses(generatedClasses);
       setClassGenerationStep('complete');
@@ -176,11 +231,13 @@ const App: React.FC = () => {
       console.error('Failed to generate game content:', error);
       setAvailableClasses(CHARACTER_CLASSES); // Fallback to defaults
       // Fallback biome progression
-      setGameState((prev) => ({
+      const fallbackCount = mode === 'recreation' ? 5 : 20;
+      setGameState((prev: any) => ({
         ...prev,
         storyContext: story,
         storyMode: mode,
-        biomeProgression: Array(20).fill('forest'),
+        biomeProgression: Array(fallbackCount).fill('forest'),
+        storyRecreation: null,
       }));
     } finally {
       setIsGeneratingClasses(false);
@@ -212,6 +269,14 @@ const App: React.FC = () => {
       const nextBiomeKey = gameState.biomeProgression[nextRoomCounter] || 'forest';
       const nextNextBiomeKey = gameState.biomeProgression[nextNextRoomCounter] || 'forest';
 
+      // Get story beats for recreation mode
+      const nextStoryBeat = gameState.storyRecreation
+        ? getStoryBeat(gameState.storyRecreation.storyStructure, nextRoomCounter)
+        : undefined;
+      const nextNextStoryBeat = gameState.storyRecreation
+        ? getStoryBeat(gameState.storyRecreation.storyStructure, nextNextRoomCounter)
+        : undefined;
+
       // Create the main generation promise
       const pairGenerationPromise = generateRoomPair(
         nextRoomId,
@@ -223,7 +288,9 @@ const App: React.FC = () => {
         nextNextBiomeKey,
         gameState.storyContext,
         gameState.storyMode,
-        currentRoomDescription
+        currentRoomDescription,
+        nextStoryBeat,
+        nextNextStoryBeat
       );
 
       // Store individual room promises (they resolve when the pair is generated)
@@ -237,24 +304,27 @@ const App: React.FC = () => {
       pairGenerationPromise.then(async ({ currentRoom: nextRoom, nextRoom: nextNextRoom }) => {
         console.log(`[App] Room pair generated, enhancing with sprites...`);
 
-        // Enhance both rooms with AI-generated sprites
-        const enhancedNextRoom = await enhanceRoomWithSprites(
-          nextRoom,
-          nextBiomeKey,
-          gameState.storyContext,
-          nextRoomCounter,
-          gameState.storyMode
-        );
+        // OPTIMIZATION: Enhance both rooms with AI-generated sprites IN PARALLEL
+        // Before: 30s + 30s = 60 seconds total
+        // After: max(30s, 30s) = 30 seconds total (50% faster!)
+        const [enhancedNextRoom, enhancedNextNextRoom] = await Promise.all([
+          enhanceRoomWithSprites(
+            nextRoom,
+            nextBiomeKey,
+            gameState.storyContext,
+            nextRoomCounter,
+            gameState.storyMode
+          ),
+          enhanceRoomWithSprites(
+            nextNextRoom,
+            nextNextBiomeKey,
+            gameState.storyContext,
+            nextNextRoomCounter,
+            gameState.storyMode
+          )
+        ]);
 
-        const enhancedNextNextRoom = await enhanceRoomWithSprites(
-          nextNextRoom,
-          nextNextBiomeKey,
-          gameState.storyContext,
-          nextNextRoomCounter,
-          gameState.storyMode
-        );
-
-        console.log(`[App] Sprites generated for pre-generated rooms`);
+        console.log(`[App] Sprites generated for pre-generated rooms (in parallel)`);
 
         // Save ENHANCED rooms to cache
         roomCache.saveRoom(enhancedNextRoom);
@@ -314,6 +384,14 @@ const App: React.FC = () => {
       // Initialize event logger
       eventLogger.initialize(character.name, gameState.storySeed);
 
+      // Get story beats for recreation mode
+      const storyBeat0 = gameState.storyRecreation
+        ? getStoryBeat(gameState.storyRecreation.storyStructure, 0)
+        : undefined;
+      const storyBeat1 = gameState.storyRecreation
+        ? getStoryBeat(gameState.storyRecreation.storyStructure, 1)
+        : undefined;
+
       // Generate room 0 and room 1 together with panorama scene
       const { currentRoom: room0, nextRoom: room1 } = await generateRoomPair(
         'room_0',
@@ -324,40 +402,37 @@ const App: React.FC = () => {
         biomeKey0,
         biomeKey1,
         gameState.storyContext,
-        gameState.storyMode
+        gameState.storyMode,
+        undefined,
+        storyBeat0,
+        storyBeat1
       );
 
-      setRoomGenerationProgress(30);
-      setRoomGenerationStep('Creating NPCs and enemies...');
+      setRoomGenerationProgress(60);
+      setRoomGenerationStep('Building environment...');
 
       console.log('[App] Room pair generated, room0 has scene:', !!room0.sceneImage);
       console.log('[App] Room pair generated, room1 has scene:', !!room1.sceneImage);
+      console.log('[App] Room0 objects with sprites:', room0.objects.filter(o => o.spriteUrl).length, '/', room0.objects.length);
+      console.log('[App] Room1 objects with sprites:', room1.objects.filter(o => o.spriteUrl).length, '/', room1.objects.length);
 
-      setRoomGenerationProgress(40);
-      setRoomGenerationStep('Generating sprites for NPCs and enemies...');
-
-      // Enhance both rooms with AI-generated sprites
-      const enhancedRoom0 = await enhanceRoomWithSprites(room0, biomeKey0, gameState.storyContext, 0, gameState.storyMode);
-      const enhancedRoom1 = await enhanceRoomWithSprites(room1, biomeKey1, gameState.storyContext, 1, gameState.storyMode);
-
-      console.log('[App] Sprites generated for initial rooms');
-
+      // Note: Sprite enhancement already done in generateRoomPair()
       const rooms = new Map<string, Room>();
-      rooms.set('room_0', enhancedRoom0);
-      rooms.set('room_1', enhancedRoom1);
+      rooms.set('room_0', room0);
+      rooms.set('room_1', room1);
 
       setRoomGenerationProgress(80);
       setRoomGenerationStep('Saving to cache...');
 
-      // Save enhanced rooms to cache
-      roomCache.saveRoom(enhancedRoom0);
-      roomCache.saveRoom(enhancedRoom1);
+      // Save rooms to cache (already enhanced with sprites)
+      roomCache.saveRoom(room0);
+      roomCache.saveRoom(room1);
 
       setRoomGenerationProgress(90);
       setRoomGenerationStep('Finalizing world...');
 
       // Set player spawn position from tile map
-      const spawnPosition = enhancedRoom0.tileMap?.spawnPoint || {x: 400, y: 300};
+      const spawnPosition = room0.tileMap?.spawnPoint || {x: 400, y: 300};
 
       // Log initial room entry
       eventLogger.logEvent(
@@ -369,7 +444,7 @@ const App: React.FC = () => {
         { biome: biomeKey0 }
       );
 
-      setGameState((prev) => ({
+      setGameState((prev: any) => ({
         ...prev,
         selectedCharacter: character,
         currentHP: character.startingHP,
@@ -395,7 +470,7 @@ const App: React.FC = () => {
       // Immediately start pre-generating rooms 2 & 3 in the background
       // This ensures they're ready when player reaches room 1
       setTimeout(() => {
-        triggerRoomPairPreGeneration(0, enhancedRoom0.description);
+        triggerRoomPairPreGeneration(0, room0.description);
       }, 100); // Small delay to ensure state is updated
     } catch (error) {
       console.error('[App] Failed to generate initial rooms:', error);
@@ -413,6 +488,71 @@ const App: React.FC = () => {
 
   const handleScreenExit = useCallback(
     async (direction: 'right' | 'left' | 'up' | 'down') => {
+      if (gameState.storyMode === 'recreation' && gameState.storyRecreation) {
+        const storyBeats = gameState.storyRecreation.storyStructure?.storyBeats || [];
+        const finalBeatIndex = storyBeats.length > 0 ? storyBeats.length - 1 : -1;
+        const reachedEndOfStory = finalBeatIndex >= 0 && gameState.roomCounter >= finalBeatIndex;
+
+        if (reachedEndOfStory) {
+          const completionMessage = 'The story recreation has reached its finale. Return to the desktop to begin a new tale.';
+
+          eventLogger.logEvent(
+            'exploration',
+            gameState.currentRoomId,
+            gameState.level,
+            gameState.currentHP,
+            completionMessage,
+            { directionAttempted: direction }
+          );
+
+          setRoomGenerationProgress(100);
+          setRoomGenerationStep('Story complete');
+
+          setGameState((prev) => {
+            if (!prev.storyRecreation) {
+              return {
+                ...prev,
+                isGeneratingRoom: false,
+                currentAnimation: {
+                  type: 'dialogue',
+                  text: completionMessage,
+                  timestamp: Date.now(),
+                },
+              };
+            }
+
+            const completedBeats = prev.storyRecreation.completedBeats.includes(finalBeatIndex)
+              ? prev.storyRecreation.completedBeats
+              : [...prev.storyRecreation.completedBeats, finalBeatIndex];
+
+            const alignmentScore = calculateStoryAlignment(
+              prev.storyRecreation.storyStructure,
+              prev.roomCounter,
+              completedBeats,
+              prev.storyRecreation.metCharacters
+            );
+
+            return {
+              ...prev,
+              isGeneratingRoom: false,
+              storyRecreation: {
+                ...prev.storyRecreation,
+                completedBeats,
+                currentBeatObjective: null,
+                alignmentScore,
+              },
+              currentAnimation: {
+                type: 'dialogue',
+                text: completionMessage,
+                timestamp: Date.now(),
+              },
+            };
+          });
+
+          return;
+        }
+      }
+
       setGameState((prev) => ({ ...prev, isGeneratingRoom: true }));
       setRoomGenerationProgress(0);
       setRoomGenerationStep('Analyzing story context...');
@@ -571,6 +711,43 @@ const App: React.FC = () => {
           newRooms.set(newRoomId, newRoom);
         }
 
+        // Recreation mode: Mark previous room's beat as completed and update objective
+        let updatedStoryRecreation = prev.storyRecreation;
+        if (prev.storyRecreation && prev.storyMode === 'recreation') {
+          const previousRoomNumber = prev.roomCounter;
+          const completedBeats = [...prev.storyRecreation.completedBeats];
+
+          // Mark previous beat as completed if not already
+          if (!completedBeats.includes(previousRoomNumber)) {
+            completedBeats.push(previousRoomNumber);
+            console.log(`[App] ✅ Story beat ${previousRoomNumber} completed!`);
+          }
+
+          // Get the next beat objective
+          const nextBeat = getStoryBeat(prev.storyRecreation.storyStructure, newRoomCounter);
+          const currentBeatObjective = nextBeat?.objective || null;
+
+          // Calculate alignment score
+          const alignmentScore = calculateStoryAlignment(
+            prev.storyRecreation.storyStructure,
+            newRoomCounter,
+            completedBeats,
+            prev.storyRecreation.metCharacters
+          );
+
+          updatedStoryRecreation = {
+            ...prev.storyRecreation,
+            completedBeats,
+            currentBeatObjective,
+            alignmentScore,
+          };
+
+          console.log(`[App] 📖 Story Recreation Update:`);
+          console.log(`  - Completed Beats: ${completedBeats.join(', ')}`);
+          console.log(`  - Current Objective: ${currentBeatObjective}`);
+          console.log(`  - Alignment Score: ${alignmentScore}%`);
+        }
+
         return {
           ...prev,
           currentRoomId: newRoomId,
@@ -579,6 +756,7 @@ const App: React.FC = () => {
           roomCounter: newRoomCounter,
           previousRoomId: prev.currentRoomId,
           isGeneratingRoom: false,
+          storyRecreation: updatedStoryRecreation,
         };
       });
 
@@ -586,8 +764,45 @@ const App: React.FC = () => {
 
       // Pre-generate next room pair (N+1 and N+2) in the background
       triggerRoomPairPreGeneration(newRoomCounter, newRoom?.description);
+
+      // OPTIMIZATION: Preload next room's images in the background (idle time)
+      // Makes next room transition feel instant
+      const nextRoomId = `room_${newRoomCounter + 1}`;
+      const nextNextRoomId = `room_${newRoomCounter + 2}`;
+
+      // Check if next rooms are in cache/memory and preload their assets
+      setTimeout(() => {
+        const nextRoom = gameState.rooms.get(nextRoomId) || roomCache.getRoom(nextRoomId);
+        const nextNextRoom = gameState.rooms.get(nextNextRoomId) || roomCache.getRoom(nextNextRoomId);
+
+        if (nextRoom) {
+          const spriteUrls = nextRoom.objects.map(obj => obj.spriteUrl).filter((url): url is string => !!url);
+          preloadRoomAssets({ sceneImage: nextRoom.sceneImage, spriteUrls })
+            .then(() => console.log(`[Preloader] Next room ${nextRoomId} assets preloaded`))
+            .catch(() => {}); // Silent fail, not critical
+        }
+
+        if (nextNextRoom) {
+          const spriteUrls = nextNextRoom.objects.map(obj => obj.spriteUrl).filter((url): url is string => !!url);
+          preloadRoomAssets({ sceneImage: nextNextRoom.sceneImage, spriteUrls })
+            .then(() => console.log(`[Preloader] Room ${nextNextRoomId} assets preloaded`))
+            .catch(() => {});
+        }
+      }, 500); // Delay to let current room fully render first
     },
-    [gameState.roomCounter, gameState.rooms, gameState.currentRoomId, gameState.storySeed, gameState.storyContext, gameState.storyMode, gameState.biomeProgression, gameState.level, gameState.currentHP, triggerRoomPairPreGeneration],
+    [
+      gameState.roomCounter,
+      gameState.rooms,
+      gameState.currentRoomId,
+      gameState.storySeed,
+      gameState.storyContext,
+      gameState.storyMode,
+      gameState.storyRecreation,
+      gameState.biomeProgression,
+      gameState.level,
+      gameState.currentHP,
+      triggerRoomPairPreGeneration
+    ],
   );
 
   // Handle adding experience and leveling up
@@ -716,6 +931,47 @@ const App: React.FC = () => {
           }
 
           setSceneData(parsedScene);
+
+          const sceneSummary = parsedScene.scene?.trim();
+          if (sceneSummary) {
+            eventLogger.logEvent(
+              'story_scene',
+              gameState.currentRoomId,
+              gameState.level,
+              updatedHP ?? gameState.currentHP,
+              sceneSummary,
+              interactingObject
+                ? interactingObject.type === 'enemy'
+                  ? {
+                      enemyId: interactingObject.id,
+                      enemyName: interactingObject.interactionText,
+                    }
+                  : {
+                      npcId: interactingObject.id,
+                      npcName: interactingObject.interactionText,
+                    }
+                : undefined,
+            );
+
+            const truncatedScene =
+              sceneSummary.length > 280 ? `${sceneSummary.slice(0, 277)}...` : sceneSummary;
+
+            setInteractionHistory((prev) => {
+              if (prev[0]?.type === 'ai_scene' && prev[0]?.elementText === truncatedScene) {
+                return prev;
+              }
+
+              const sceneInteraction: InteractionData = {
+                id: `scene_${Date.now()}`,
+                type: 'ai_scene',
+                elementText: truncatedScene,
+                elementType: 'ai_scene',
+                appContext: 'roguelike_game',
+              };
+
+              return [sceneInteraction, ...prev].slice(0, maxHistoryLength);
+            });
+          }
         } catch (parseError) {
           console.error('Failed to parse JSON:', parseError);
           console.log('Raw content:', accumulatedContent);
@@ -738,9 +994,21 @@ const App: React.FC = () => {
       const eventMessage = object.type === 'enemy' 
         ? `Started battle with ${object.interactionText}`
         : `Interacted with ${object.interactionText}`;
-      const eventData = object.type === 'enemy'
-        ? { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
-        : { npcId: object.id, npcName: object.interactionText };
+      const shouldGrantInteractionXP = (object.type === 'npc' || object.type === 'item') && !object.hasInteracted;
+      const eventData =
+        object.type === 'enemy'
+          ? { enemyId: object.id, enemyName: object.interactionText, enemyLevel: object.enemyLevel }
+          : object.type === 'item'
+          ? {
+              itemId: object.id,
+              itemName: object.interactionText,
+              ...(shouldGrantInteractionXP ? { xpGained: XP_REWARDS.narrativeInteraction } : {}),
+            }
+          : {
+              npcId: object.id,
+              npcName: object.interactionText,
+              ...(shouldGrantInteractionXP ? { xpGained: XP_REWARDS.narrativeInteraction } : {}),
+            };
 
       eventLogger.logEvent(
         eventType,
@@ -778,8 +1046,47 @@ const App: React.FC = () => {
         const newRooms = new Map(prev.rooms);
         newRooms.set(prev.currentRoomId, updatedRoom);
 
-        return {...prev, rooms: newRooms};
+        // Recreation mode: Track character encounters for alignment scoring
+        let updatedStoryRecreation = prev.storyRecreation;
+        if (prev.storyRecreation && prev.storyMode === 'recreation') {
+          // Check if this is a story character (story_npc_* or story_enemy_*)
+          const isStoryCharacter = object.id.startsWith('story_npc_') || object.id.startsWith('story_enemy_');
+
+          if (isStoryCharacter) {
+            // Extract character name from interaction text
+            // Format: "CharacterName: text" or "CharacterName stands in your way!"
+            const nameMatch = object.interactionText.match(/^([^:!]+)(?::|!|\s+stands)/);
+            const characterName = nameMatch ? nameMatch[1].trim() : null;
+
+            if (characterName && !prev.storyRecreation.metCharacters.includes(characterName)) {
+              const metCharacters = [...prev.storyRecreation.metCharacters, characterName];
+              console.log(`[App] 👤 Met story character: ${characterName}`);
+
+              // Recalculate alignment score with new character
+              const alignmentScore = calculateStoryAlignment(
+                prev.storyRecreation.storyStructure,
+                prev.roomCounter,
+                prev.storyRecreation.completedBeats,
+                metCharacters
+              );
+
+              updatedStoryRecreation = {
+                ...prev.storyRecreation,
+                metCharacters,
+                alignmentScore,
+              };
+
+              console.log(`[App] 📊 Alignment Score updated: ${alignmentScore}%`);
+            }
+          }
+        }
+
+        return {...prev, rooms: newRooms, storyRecreation: updatedStoryRecreation};
       });
+
+      if (shouldGrantInteractionXP) {
+        handleAddExperience(XP_REWARDS.narrativeInteraction);
+      }
 
       const interactionData: InteractionData = {
         id: object.id,
@@ -802,7 +1109,7 @@ const App: React.FC = () => {
 
       internalHandleLlmRequest(newHistory, currentMaxHistoryLength, undefined, object);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, gameState.currentRoomId, gameState.level, gameState.currentHP],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, handleAddExperience, gameState.currentRoomId, gameState.level, gameState.currentHP],
   );
 
   const handleCombatChoice = useCallback(
@@ -907,14 +1214,17 @@ const App: React.FC = () => {
           },
         }));
       } else if (choiceType === 'loot') {
+        const lootXP = XP_REWARDS.lootDiscovery;
         eventLogger.logEvent(
           'loot',
           gameState.currentRoomId,
           gameState.level,
           gameState.currentHP,
           choiceText,
-          { choiceId, choiceType }
+          { choiceId, choiceType, xpGained: lootXP }
         );
+
+        handleAddExperience(lootXP);
 
         setGameState((prev) => ({
           ...prev,
@@ -990,7 +1300,7 @@ const App: React.FC = () => {
       // Start LLM request immediately (runs in background)
       internalHandleLlmRequest(newHistory, currentMaxHistoryLength, newHP, currentInteractingObject);
     },
-    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, sceneData, gameState.currentHP, gameState.selectedCharacter, currentInteractingObject, gameState.currentRoomId],
+    [interactionHistory, currentMaxHistoryLength, internalHandleLlmRequest, handleAddExperience, sceneData, gameState.currentHP, gameState.selectedCharacter, currentInteractingObject, gameState.currentRoomId],
   );
 
   const handleBattleAction = useCallback((action: string) => {
@@ -1132,9 +1442,12 @@ const App: React.FC = () => {
               `Found ${gameState.battleState.enemy.itemDrop.name}`,
               { 
                 itemId: gameState.battleState.enemy.itemDrop.id,
-                itemName: gameState.battleState.enemy.itemDrop.name 
+                itemName: gameState.battleState.enemy.itemDrop.name,
+                xpGained: XP_REWARDS.itemAcquired,
               }
             );
+
+            handleAddExperience(XP_REWARDS.itemAcquired);
 
             setGameState(prev => ({
               ...prev,
@@ -1421,6 +1734,8 @@ const App: React.FC = () => {
                   experience={gameState.experience}
                   experienceToNextLevel={gameState.experienceToNextLevel}
                   roomCounter={gameState.roomCounter}
+                  storyObjective={gameState.storyRecreation?.currentBeatObjective}
+                  storyAlignment={gameState.storyRecreation?.alignmentScore}
                 />
               )}
 

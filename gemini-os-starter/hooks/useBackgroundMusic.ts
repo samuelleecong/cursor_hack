@@ -99,10 +99,29 @@ export const useBackgroundMusic = (
   }, []);
 
   /**
-   * Play current track
+   * Play/resume audio - prioritizes main theme if available
    */
   const play = useCallback(() => {
-    if (currentAudioRef.current && enabled) {
+    if (!enabled) {
+      console.log('[useBackgroundMusic] Music disabled, not playing');
+      return;
+    }
+
+    console.log('[useBackgroundMusic] Playing/resuming audio...');
+
+    // Prioritize main theme (the primary audio layer)
+    if (mainThemeAudioRef.current) {
+      mainThemeAudioRef.current.play().catch((err) => {
+        console.error('[useBackgroundMusic] Main theme play failed:', err);
+        setError('Failed to play main theme');
+      });
+      console.log('[useBackgroundMusic] Main theme resumed');
+      setIsPlaying(true);
+      return;
+    }
+
+    // Fallback to legacy single track
+    if (currentAudioRef.current) {
       currentAudioRef.current.play().catch((err) => {
         console.error('[useBackgroundMusic] Play failed:', err);
         setError('Failed to play music');
@@ -112,13 +131,29 @@ export const useBackgroundMusic = (
   }, [enabled]);
 
   /**
-   * Pause current track
+   * Pause ALL audio (main theme, overlay, and legacy current track)
    */
   const pause = useCallback(() => {
+    console.log('[useBackgroundMusic] Pausing all audio...');
+
+    // Pause legacy single track
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
-      setIsPlaying(false);
     }
+
+    // Pause main theme
+    if (mainThemeAudioRef.current) {
+      mainThemeAudioRef.current.pause();
+      console.log('[useBackgroundMusic] Main theme paused');
+    }
+
+    // Pause overlay (battle music)
+    if (overlayAudioRef.current) {
+      overlayAudioRef.current.pause();
+      console.log('[useBackgroundMusic] Overlay paused');
+    }
+
+    setIsPlaying(false);
   }, []);
 
   /**

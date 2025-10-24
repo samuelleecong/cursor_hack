@@ -6,8 +6,14 @@
 import * as fal from '@fal-ai/serverless-client';
 import { spriteCache } from './spriteCache';
 
+// Use environment variable for credentials
+const falKey = import.meta.env.VITE_FAL_KEY;
+if (!falKey) {
+  console.error('[SpriteGen] VITE_FAL_KEY not found in environment variables');
+}
+
 fal.config({
-  credentials: 'a2570e68-cecf-427f-bac2-8088260cf7cc:71a537235ff88639ac23425615b658ed',
+  credentials: falKey,
 });
 
 export interface SpriteGenerationParams {
@@ -24,7 +30,7 @@ export interface GeneratedSprite {
   cached: boolean;
 }
 
-const SPRITE_STYLE = 'pixel art sprite, 32x32 pixels, 16-bit SNES style, retro RPG aesthetic, consistent pixel art style, NO BACKGROUND, transparent background, isolated sprite, game asset, clean crisp edges, simple iconic design, top-down view, cohesive art direction';
+const SPRITE_STYLE = 'pixel art sprite, 32x32 pixels, 16-bit SNES style, retro game aesthetic, consistent pixel art style, NO BACKGROUND, transparent background, isolated sprite, game asset, clean crisp edges, simple iconic design, top-down view, cohesive art direction';
 
 function buildSpritePrompt(params: SpriteGenerationParams): string {
   const { description, type, biome, storyContext } = params;
@@ -156,14 +162,11 @@ export async function generateSprite(
 export async function generateMultipleSprites(
   sprites: SpriteGenerationParams[]
 ): Promise<GeneratedSprite[]> {
-  const results: GeneratedSprite[] = [];
-
-  for (const sprite of sprites) {
-    const result = await generateSprite(sprite);
-    results.push(result);
-  }
-
-  return results;
+  // OPTIMIZATION: Generate all sprites in parallel instead of sequentially
+  // Before: 10s × 5 sprites = 50 seconds
+  // After: 10s (all run simultaneously) = 80% faster!
+  console.log(`[SpriteGen] Generating ${sprites.length} sprites in parallel...`);
+  return Promise.all(sprites.map(sprite => generateSprite(sprite)));
 }
 
 export async function generateCharacterSprite(

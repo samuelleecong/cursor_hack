@@ -6,14 +6,8 @@
 import { Room, StoryMode } from '../types';
 import { generateRoom } from './roomGenerator';
 import { generatePixelArt } from './falService';
-import { GoogleGenAI } from '@google/genai';
 import { TileMap } from './mapGenerator';
-
-if (!process.env.API_KEY) {
-  console.error('API_KEY environment variable is not set for scene generation.');
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+import {getGeminiClient, GEMINI_MODELS} from './config/geminiClient';
 
 /**
  * Configuration for multi-room batch generation
@@ -236,8 +230,9 @@ export async function generateMultiRoomBatch(
 
   console.log(`[MultiRoomGen] Generating panorama prompt using Gemini 2.5 Pro...`);
 
+  const ai = getGeminiClient();
   const response = await ai.models.generateContentStream({
-    model: 'gemini-2.5-pro',
+    model: GEMINI_MODELS.PRO,
     contents: promptRequest,
     config: {},
   });

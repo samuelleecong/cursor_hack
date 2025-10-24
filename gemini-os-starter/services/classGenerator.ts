@@ -3,11 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /* tslint:disable */
-import {GoogleGenAI} from '@google/genai';
 import {CharacterClass, CHARACTER_CLASSES} from '../characterClasses';
 import {StoryMode} from '../types';
-
-const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
+import {getGeminiClient, GEMINI_MODELS, isApiKeyConfigured} from './config/geminiClient';
 
 const CHARACTER_EXTRACTION_PROMPT = (storyContext: string) => `
 You are a game design AI. Based on the story provided, extract 5 main characters from the story that the player could play AS.
@@ -252,6 +250,7 @@ async function attemptClassGeneration(
   try {
     console.log(`[ClassGenerator] Attempt ${attemptNumber}/3: Generating classes...`);
 
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
@@ -310,12 +309,12 @@ export async function generateCharacterClasses(
     return getDefaultClasses();
   }
 
-  if (!process.env.API_KEY) {
+  if (!isApiKeyConfigured()) {
     console.error('API_KEY not configured, using default classes');
     return getDefaultClasses();
   }
 
-  const model = 'gemini-2.5-flash-lite';
+  const model = GEMINI_MODELS.FLASH_LITE;
 
   // Use different prompts based on mode
   let prompt: string;

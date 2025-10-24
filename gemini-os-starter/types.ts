@@ -121,6 +121,14 @@ export interface StoryConsequence {
 
 export type StoryMode = 'inspiration' | 'recreation' | 'continuation';
 
+export interface StoryRecreationState {
+  storyStructure: any; // StoryStructure from storyStructureService
+  completedBeats: number[]; // Array of completed room numbers
+  metCharacters: string[]; // Names of characters the player has encountered
+  currentBeatObjective: string | null; // Current objective to display
+  alignmentScore: number; // 0-100 score of how well following the story
+}
+
 export interface GameState {
   selectedCharacter: CharacterClass | null;
   currentHP: number;
@@ -147,4 +155,5 @@ export interface GameState {
   nextRoomScenePromise?: Promise<string | null>; // Promise for pre-generating next room's scene
   previousRoomId?: string; // Track previous room for scene transitions
   isGeneratingRoom: boolean;
+  storyRecreation: StoryRecreationState | null; // Only populated in recreation mode
 }

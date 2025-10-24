@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /* tslint:disable */
-import { GoogleGenAI } from '@google/genai';
 import { Room, StoryMode, GameObject } from '../types';
 import { BiomeType, TileMap } from './mapGenerator';
 import { slicePanoramaImage, createFallbackScene } from '../utils/imageSlicing';
@@ -11,12 +10,7 @@ import { getCachedImage, cacheImage } from '../utils/imageCache';
 import { generatePixelArt } from './falService';
 import { tileMapToReferenceImage, resizeTileMapReference, combineTileMapsAsPanorama, tileMapToBlob } from '../utils/tileMapToImage';
 import { USE_BIOME_FOR_IMAGES } from '../constants';
-
-if (!process.env.API_KEY) {
-  console.error('API_KEY environment variable is not set for scene generation.');
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+import {getGeminiClient, GEMINI_MODELS} from './config/geminiClient';
 
 export interface SceneGenerationParams {
   roomId: string;
@@ -28,6 +22,20 @@ export interface SceneGenerationParams {
   storyMode?: StoryMode;
   previousRoomDescription?: string;
   tileMap?: TileMap; // Include tile map for reference image generation
+}
+
+/**
+ * OPTIMIZATION: Hash function for content-based cache keys
+ * Same content = same hash = reuse cached scenes across sessions
+ */
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36);
 }
 
 /**
@@ -48,11 +56,11 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
 
   // Biome descriptions - STYLE ONLY, no layout (fallback for legacy biomes)
   const biomeDescriptions: Record<BiomeType, string> = {
-    forest: 'lush forest with ancient trees, moss-covered stones, dappled sunlight filtering through leaves',
-    plains: 'open grasslands with rolling hills, wildflowers, and distant mountains in soft focus',
-    desert: 'sandy terrain with scattered cacti, rocky outcrops, and shimmering heat haze',
-    cave: 'dark cavern with stalactites, underground pools, and glowing crystals casting ethereal light',
-    dungeon: 'ancient stone corridors with flickering torches, crumbling walls, and mysterious shadows',
+    forest: 'lush parkland with tall trees, mossy boulders, and soft sunlight cutting through the canopy',
+    plains: 'open grasslands with gentle hills, native plants, and distant skylines in soft focus',
+    desert: 'arid terrain with wind-swept dunes, hardy shrubs, and shimmering heat haze',
+    cave: 'subterranean tunnels with reinforced rock walls, industrial lighting, and shallow reflective pools',
+    dungeon: 'industrial corridors with exposed pipes, emergency lighting, and maintenance equipment stacked along the walls',
   };
 
   // CRITICAL FIX: Use biomeDefinition.atmosphere if available (for story-aware custom biomes)
@@ -64,9 +72,9 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     console.log(`[SceneGen] Using custom biome atmosphere: ${biomeStyle}`);
   } else if (USE_BIOME_FOR_IMAGES) {
     // Fallback to hardcoded descriptions for legacy biomes
-    biomeStyle = biomeDescriptions[biome] || 'generic fantasy RPG environment';
+    biomeStyle = biomeDescriptions[biome] || 'generic game environment';
   } else {
-    biomeStyle = 'generic fantasy RPG environment';
+    biomeStyle = 'generic game environment';
   }
 
   // Summarize objects - VISUAL STYLE, not placement
@@ -94,6 +102,9 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
       inspiration: 'Capture the color palette, mood, and aesthetic themes. Every visual must feel authentic to this setting.',
     };
 
+    const fantasySignals = /(wizard|magic|spell|dragon|sorcerer|witch|mage|necromancer|demon|ghost|spirit|specter|enchanted|paladin|elf|dwarf|orc|goblin)/i;
+    const isExplicitFantasy = fantasySignals.test(storyContext);
+
     storySection = `
 **CRITICAL STORY CONTEXT (${storyMode || 'inspiration'} mode):**
 "${storyContext.substring(0, 400)}..."
@@ -101,6 +112,12 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
 MANDATORY REQUIREMENT: The visual style MUST reflect this specific story setting, NOT generic fantasy.
 ${modeInstructions[storyMode || 'inspiration']}
 If this is a modern, sports, sci-fi, or non-fantasy setting, DO NOT use medieval/fantasy visuals.
+${!isExplicitFantasy ? `
+ABSOLUTE RESTRICTION: This narrative contains no supernatural or magical elements.
+- Avoid ghosts, spirits, glowing runes, magical auras, floating particles, or mythic creatures.
+- Use real-world lighting sources (stadium lights, office fixtures, street lamps, etc.).
+- Architecture, props, and costumes must belong to the story's actual genre and era.
+` : ''}
 `;
   }
 
@@ -153,47 +170,60 @@ export async function generateSingleRoomScene(
     // Build the request for Gemini
     const promptRequest = buildScenePromptRequest(params);
 
-    // Check cache first (v2 = path description system)
-    const cacheKey = `scene_v2_${roomId}_${biome}`;
+    // OPTIMIZATION: Check cache first using content-based key (v3 = content hash)
+    // Hash based on description + biome, not roomId, so scenes can be reused across sessions
+    const descriptionHash = hashString(params.description + params.biome + (params.previousRoomDescription || ''));
+    const cacheKey = `scene_v3_${descriptionHash}`;
     const cachedUrl = getCachedImage(cacheKey);
 
     if (cachedUrl) {
-      console.log(`[SceneGen] Using cached scene for room ${roomId}`);
+      console.log(`[SceneGen] Using cached scene (content-based cache key: ${cacheKey.slice(0, 30)}...)`);
       return cachedUrl;
     }
 
     console.log(`[SceneGen] Generating prompt for room ${roomId} using Gemini 2.5 Flash...`);
 
-    // Use Gemini 2.5 Flash for prompt generation (15 req/min vs Pro's 2 req/min)
-    const response = await ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
-      contents: promptRequest,
-      config: {},
-    });
+    // OPTIMIZATION: Run Gemini prompt generation and tilemap conversion in parallel
+    const [imagePrompt, referenceImage] = await Promise.all([
+      // Operation 1: Gemini prompt generation (1-2s)
+      (async () => {
+        const ai = getGeminiClient();
+        const response = await ai.models.generateContentStream({
+          model: GEMINI_MODELS.FLASH,
+          contents: promptRequest,
+          config: {},
+        });
 
-    // Extract the generated prompt from stream
-    let imagePrompt = '';
-    for await (const chunk of response) {
-      if (chunk.text) {
-        imagePrompt += chunk.text;
-      }
-    }
-    console.log(imagePrompt);
+        // Extract the generated prompt from stream
+        let prompt = '';
+        for await (const chunk of response) {
+          if (chunk.text) {
+            prompt += chunk.text;
+          }
+        }
+        console.log(prompt);
 
-    imagePrompt = imagePrompt.trim();
-    console.log(`[SceneGen] Gemini generated prompt: ${imagePrompt.substring(0, 150)}...`);
+        const trimmedPrompt = prompt.trim();
+        console.log(`[SceneGen] Gemini generated prompt: ${trimmedPrompt.substring(0, 150)}...`);
+        return trimmedPrompt;
+      })(),
 
-    // Generate reference image from tile map as Blob (more efficient for fal.ai)
-    let referenceImage: Blob | undefined;
-    if (params.tileMap) {
-      try {
-        console.log(`[SceneGen] Converting tile map to reference Blob...`);
-        referenceImage = await tileMapToBlob(params.tileMap);
-        console.log(`[SceneGen] Reference Blob ready (${referenceImage.size} bytes, tile map guide)`);
-      } catch (error) {
-        console.warn(`[SceneGen] Failed to create reference image:`, error);
-      }
-    }
+      // Operation 2: Tilemap conversion (0.3-0.5s) - runs in parallel!
+      (async () => {
+        if (params.tileMap) {
+          try {
+            console.log(`[SceneGen] Converting tile map to reference Blob...`);
+            const blob = await tileMapToBlob(params.tileMap);
+            console.log(`[SceneGen] Reference Blob ready (${blob.size} bytes, tile map guide)`);
+            return blob;
+          } catch (error) {
+            console.warn(`[SceneGen] Failed to create reference image:`, error);
+            return undefined;
+          }
+        }
+        return undefined;
+      })()
+    ]);
 
     console.log(`[SceneGen] Generating image via fal.ai for room ${roomId}${referenceImage ? ' (with path-based reference)' : ''}...`);
 
@@ -236,58 +266,67 @@ export async function generateScenePanorama(
 
     console.log(`[SceneGen] Generating panorama prompts for rooms ${currentRoomParams.roomId} + ${nextRoomParams.roomId}...`);
 
-    // Generate prompts using Gemini 2.5 Flash (15 req/min vs Pro's 2 req/min)
-    const currentResponsePromise = ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
-      contents: currentPromptRequest,
-      config: {},
-    });
+    // OPTIMIZATION: Run both Gemini calls AND tilemap combination in parallel
+    const [currentImagePrompt, nextImagePrompt, panoramaReferenceUrl] = await Promise.all([
+      // Operation 1: Generate current room prompt (1-2s)
+      (async () => {
+        const ai = getGeminiClient();
+        const response = await ai.models.generateContentStream({
+          model: GEMINI_MODELS.FLASH,
+          contents: currentPromptRequest,
+          config: {},
+        });
 
-    const nextResponsePromise = ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
-      contents: nextPromptRequest,
-      config: {},
-    });
+        let prompt = '';
+        for await (const chunk of response) {
+          if (chunk.text) prompt += chunk.text;
+        }
+        return prompt.trim();
+      })(),
 
-    // Extract prompts from both streams
-    let currentImagePrompt = '';
-    let nextImagePrompt = '';
+      // Operation 2: Generate next room prompt (1-2s) - runs in parallel!
+      (async () => {
+        const ai = getGeminiClient();
+        const response = await ai.models.generateContentStream({
+          model: GEMINI_MODELS.FLASH,
+          contents: nextPromptRequest,
+          config: {},
+        });
 
-    const currentResponse = await currentResponsePromise;
-    for await (const chunk of currentResponse) {
-      if (chunk.text) currentImagePrompt += chunk.text;
-    }
+        let prompt = '';
+        for await (const chunk of response) {
+          if (chunk.text) prompt += chunk.text;
+        }
+        return prompt.trim();
+      })(),
 
-    const nextResponse = await nextResponsePromise;
-    for await (const chunk of nextResponse) {
-      if (chunk.text) nextImagePrompt += chunk.text;
-    }
-
-    currentImagePrompt = currentImagePrompt.trim();
-    nextImagePrompt = nextImagePrompt.trim();
+      // Operation 3: Combine tilemaps (0.5s) - also runs in parallel!
+      (async () => {
+        if (currentRoomParams.tileMap && nextRoomParams.tileMap) {
+          try {
+            console.log(`[SceneGen] Creating panorama reference with path guidance...`);
+            const url = await combineTileMapsAsPanorama(
+              currentRoomParams.tileMap,
+              nextRoomParams.tileMap
+            );
+            console.log(`[SceneGen] Panorama reference ready`);
+            return url;
+          } catch (error) {
+            console.warn(`[SceneGen] Failed to create panorama reference:`, error);
+            return undefined;
+          }
+        }
+        return undefined;
+      })()
+    ]);
 
     const currentPath = currentRoomParams.tileMap?.pathDescription?.fullDescription || '';
     const nextPath = nextRoomParams.tileMap?.pathDescription?.fullDescription || '';
-    
+
     const panoramaPrompt = `LEFT SECTION: ${currentImagePrompt} Path layout: ${currentPath} | RIGHT SECTION: ${nextImagePrompt} Path layout: ${nextPath}
 Seamlessly blended artistic styles with unified lighting and color harmony. Natural visual transition between areas where the paths connect.`;
 
     console.log(`[SceneGen] Panorama prompt: ${panoramaPrompt.substring(0, 200)}...`);
-
-    // Generate combined tile map reference (2000x800)
-    let panoramaReferenceUrl: string | undefined;
-    if (currentRoomParams.tileMap && nextRoomParams.tileMap) {
-      try {
-        console.log(`[SceneGen] Creating panorama reference with path guidance...`);
-        panoramaReferenceUrl = await combineTileMapsAsPanorama(
-          currentRoomParams.tileMap,
-          nextRoomParams.tileMap
-        );
-        console.log(`[SceneGen] Panorama reference ready`);
-      } catch (error) {
-        console.warn(`[SceneGen] Failed to create panorama reference:`, error);
-      }
-    }
 
     console.log(`[SceneGen] Generating 2000x800 panorama via fal.ai${panoramaReferenceUrl ? ' (with path reference)' : ''}...`);
 
@@ -311,9 +350,12 @@ Seamlessly blended artistic styles with unified lighting and color harmony. Natu
   } catch (error) {
     console.error('[SceneGen] Failed to generate panorama:', error);
 
-    // Fallback: Generate individual scenes
-    const currentScene = await generateSingleRoomScene(currentRoomParams);
-    const nextScene = await generateSingleRoomScene(nextRoomParams);
+    // Fallback: Generate individual scenes in parallel for faster recovery
+    console.log('[SceneGen] Generating fallback scenes in parallel...');
+    const [currentScene, nextScene] = await Promise.all([
+      generateSingleRoomScene(currentRoomParams),
+      generateSingleRoomScene(nextRoomParams)
+    ]);
 
     return { currentScene, nextScene };
   }

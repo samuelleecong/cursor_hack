@@ -16,6 +16,8 @@ interface GameHUDProps {
   experience?: number;
   experienceToNextLevel?: number;
   roomCounter?: number;
+  storyObjective?: string | null; // Recreation mode objective
+  storyAlignment?: number; // Recreation mode alignment score (0-100)
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -28,6 +30,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   experience = 0,
   experienceToNextLevel = 100,
   roomCounter = 0,
+  storyObjective = null,
+  storyAlignment = null,
 }) => {
   const actualMaxHP = maxHP || character.startingHP;
   const hpPercentage = (currentHP / actualMaxHP) * 100;
@@ -104,6 +108,90 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           Room {roomCounter}
         </p>
       </div>
+
+      {/* Story Objective Section (Recreation Mode Only) */}
+      {storyObjective && (
+        <div
+          className="mb-4 p-4"
+          style={{
+            backgroundColor: '#f4e8d0',
+            border: '5px solid #3d2817',
+            borderRadius: '4px',
+            boxShadow: 'inset 0 3px 0 #fff9e8'
+          }}
+        >
+          <div
+            className="mb-2 pb-2"
+            style={{
+              borderBottom: '3px solid #c9b896'
+            }}
+          >
+            <h3
+              style={{
+                fontSize: '14px',
+                fontWeight: 'bold',
+                color: '#3d2817',
+                letterSpacing: '1px',
+                textAlign: 'center'
+              }}
+            >
+              📖 OBJECTIVE
+            </h3>
+          </div>
+          <p
+            style={{
+              fontSize: '11px',
+              color: '#5c3d2e',
+              lineHeight: '1.5',
+              textAlign: 'center',
+              marginBottom: storyAlignment !== null ? '12px' : '0'
+            }}
+          >
+            {storyObjective}
+          </p>
+          {storyAlignment !== null && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#3d2817',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  🎭 Story Alignment
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#3d2817',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {storyAlignment}%
+                </span>
+              </div>
+              <div
+                className="w-full h-6 overflow-hidden"
+                style={{
+                  backgroundColor: '#8b6f47',
+                  border: '3px solid #3d2817',
+                  borderRadius: '4px',
+                  boxShadow: 'inset 2px 2px 0 rgba(0,0,0,0.2)'
+                }}
+              >
+                <div
+                  className="h-full transition-all duration-300"
+                  style={{
+                    width: `${Math.max(storyAlignment, 0)}%`,
+                    backgroundColor: storyAlignment > 70 ? '#6fa85c' : storyAlignment > 40 ? '#d4a574' : '#c9534f'
+                  }}
+                ></div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats Section */}
       <div

@@ -118,7 +118,9 @@ function drawCharacterSprite(
   }
 }
 
-export const GameCanvas: React.FC<GameCanvasProps> = ({
+// OPTIMIZATION: Wrap with React.memo to prevent unnecessary re-renders
+// Custom comparison function checks if props actually changed
+const GameCanvasComponent: React.FC<GameCanvasProps> = ({
   character,
   currentHP,
   playerPosition,
@@ -742,3 +744,59 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     </div>
   );
 };
+
+// OPTIMIZATION: Export memoized version with custom comparison
+// Only re-render if actual game state changed (not on every parent render)
+export const GameCanvas = React.memo(
+  GameCanvasComponent,
+  (prevProps, nextProps) => {
+    // Return true if props are equal (skip re-render)
+    // Return false if props changed (trigger re-render)
+
+    // Check position (most frequent change)
+    if (
+      prevProps.playerPosition.x !== nextProps.playerPosition.x ||
+      prevProps.playerPosition.y !== nextProps.playerPosition.y
+    ) {
+      return false; // Position changed, re-render
+    }
+
+    // Check HP
+    if (prevProps.currentHP !== nextProps.currentHP) {
+      return false;
+    }
+
+    // Check character (rarely changes but important)
+    if (prevProps.character.name !== nextProps.character.name) {
+      return false;
+    }
+
+    // Check room (scene image)
+    if (prevProps.room?.sceneImage !== nextProps.room?.sceneImage) {
+      return false;
+    }
+
+    // Check objects array (expensive, so check reference first)
+    if (prevProps.objects !== nextProps.objects) {
+      // Arrays are different references, check length first
+      if (prevProps.objects.length !== nextProps.objects.length) {
+        return false;
+      }
+
+      // Check if any object IDs changed (quick check)
+      const prevIds = prevProps.objects.map(o => o.id).sort().join(',');
+      const nextIds = nextProps.objects.map(o => o.id).sort().join(',');
+      if (prevIds !== nextIds) {
+        return false;
+      }
+    }
+
+    // Check battle state
+    if (prevProps.battleState?.status !== nextProps.battleState?.status) {
+      return false;
+    }
+
+    // All important props are the same, skip re-render
+    return true;
+  }
+);

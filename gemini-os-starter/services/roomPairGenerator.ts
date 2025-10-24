@@ -7,6 +7,7 @@ import { Room, StoryMode } from '../types';
 import { generateRoom } from './roomGenerator';
 import { generateScenePanorama } from './sceneImageGenerator';
 import { enhanceRoomWithSprites } from './roomSpriteEnhancer';
+import { StoryBeat } from './storyStructureService';
 
 /**
  * Generate a pair of rooms (current + next) with panoramic scene generation
@@ -22,9 +23,17 @@ export async function generateRoomPair(
   nextBiomeKey: string,
   storyContext?: string | null,
   storyMode?: StoryMode,
-  previousRoomDescription?: string
+  previousRoomDescription?: string,
+  currentStoryBeat?: StoryBeat,
+  nextStoryBeat?: StoryBeat
 ): Promise<{ currentRoom: Room; nextRoom: Room }> {
   console.log(`[RoomPairGen] Generating room pair: ${currentRoomId} + ${nextRoomId}`);
+  if (currentStoryBeat) {
+    console.log(`[RoomPairGen] Current room story beat: ${currentStoryBeat.title}`);
+  }
+  if (nextStoryBeat) {
+    console.log(`[RoomPairGen] Next room story beat: ${nextStoryBeat.title}`);
+  }
 
   // Generate both rooms WITHOUT scene images first (just tile maps and objects)
   const [currentRoomBase, nextRoomBase] = await Promise.all([
@@ -36,7 +45,8 @@ export async function generateRoomPair(
       storyContext,
       storyMode,
       previousRoomDescription,
-      false // Don't generate scene yet
+      false, // Don't generate scene yet
+      currentStoryBeat // Pass story beat for recreation mode
     ),
     generateRoom(
       nextRoomId,
@@ -46,7 +56,8 @@ export async function generateRoomPair(
       storyContext,
       storyMode,
       undefined,
-      false // Don't generate scene yet
+      false, // Don't generate scene yet
+      nextStoryBeat // Pass story beat for recreation mode
     ),
   ]);
 

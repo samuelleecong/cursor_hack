@@ -318,7 +318,7 @@ export const StoryInput: React.FC<StoryInputProps> = ({ onSubmit }) => {
             placeholder="Type your story here...
 
 Example:
-In the village of Harvest Moon, a mysterious stranger arrives with tales of ancient magic and forgotten treasures hidden deep within the enchanted forest..."
+Inside the headquarters of Horizon Labs, a product lead must rescue a failing launch minutes before investors arrive, coordinating teammates across departments while the clock keeps ticking..."
             className="w-full h-64 p-4"
             style={{
               backgroundColor: '#fff9e8',

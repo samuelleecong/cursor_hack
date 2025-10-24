@@ -13,6 +13,45 @@ export interface CachedImage {
 const CACHE_KEY_PREFIX = 'pixelart_cache_';
 const MAX_CACHE_SIZE = 50; // Maximum number of cached images
 const CACHE_EXPIRY_DAYS = 7; // Images expire after 7 days
+const CACHE_METADATA_KEY = 'pixelart_cache_metadata'; // Track all cache keys
+
+// OPTIMIZATION: In-memory metadata to avoid O(n) localStorage loops
+interface CacheMetadata {
+  key: string;
+  timestamp: number;
+}
+
+let cacheMetadata: CacheMetadata[] = [];
+let metadataInitialized = false;
+
+/**
+ * Initialize cache metadata from localStorage (called once)
+ */
+function initCacheMetadata(): void {
+  if (metadataInitialized) return;
+
+  try {
+    const stored = localStorage.getItem(CACHE_METADATA_KEY);
+    cacheMetadata = stored ? JSON.parse(stored) : [];
+    metadataInitialized = true;
+    console.log(`[ImageCache] Initialized with ${cacheMetadata.length} cached images`);
+  } catch (error) {
+    console.error('[ImageCache] Error loading metadata:', error);
+    cacheMetadata = [];
+    metadataInitialized = true;
+  }
+}
+
+/**
+ * Save cache metadata to localStorage
+ */
+function saveCacheMetadata(): void {
+  try {
+    localStorage.setItem(CACHE_METADATA_KEY, JSON.stringify(cacheMetadata));
+  } catch (error) {
+    console.error('[ImageCache] Error saving metadata:', error);
+  }
+}
 
 /**
  * Generate a cache key from a prompt
@@ -32,6 +71,8 @@ function getCacheKey(prompt: string): string {
  * Check if cached image exists and is valid
  */
 export function getCachedImage(prompt: string): string | null {
+  initCacheMetadata(); // Ensure metadata is loaded
+
   try {
     const cacheKey = getCacheKey(prompt);
     const cached = localStorage.getItem(cacheKey);
@@ -46,6 +87,9 @@ export function getCachedImage(prompt: string): string | null {
 
     if (now - cachedData.timestamp > expiryTime) {
       localStorage.removeItem(cacheKey);
+      // Remove from metadata
+      cacheMetadata = cacheMetadata.filter(m => m.key !== cacheKey);
+      saveCacheMetadata();
       return null;
     }
 
@@ -60,15 +104,24 @@ export function getCachedImage(prompt: string): string | null {
  * Save generated image to cache
  */
 export function cacheImage(prompt: string, url: string): void {
+  initCacheMetadata(); // Ensure metadata is loaded
+
   try {
     const cacheKey = getCacheKey(prompt);
+    const timestamp = Date.now();
     const cachedData: CachedImage = {
       url,
       prompt,
-      timestamp: Date.now(),
+      timestamp,
     };
 
     localStorage.setItem(cacheKey, JSON.stringify(cachedData));
+
+    // OPTIMIZATION: Update metadata instead of scanning all keys
+    // Remove existing entry if present
+    cacheMetadata = cacheMetadata.filter(m => m.key !== cacheKey);
+    // Add new entry
+    cacheMetadata.push({ key: cacheKey, timestamp });
 
     // Clean up old cache entries if we exceed max size
     cleanupCache();
@@ -79,33 +132,29 @@ export function cacheImage(prompt: string, url: string): void {
 
 /**
  * Remove oldest cache entries if we exceed max size
+ * OPTIMIZATION: Uses metadata instead of O(n) localStorage loop
  */
 function cleanupCache(): void {
   try {
-    const cacheKeys: Array<{ key: string; timestamp: number }> = [];
-
-    // Find all cache keys
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(CACHE_KEY_PREFIX)) {
-        const cached = localStorage.getItem(key);
-        if (cached) {
-          const data: CachedImage = JSON.parse(cached);
-          cacheKeys.push({ key, timestamp: data.timestamp });
-        }
-      }
-    }
-
     // If we exceed max size, remove oldest entries
-    if (cacheKeys.length > MAX_CACHE_SIZE) {
-      cacheKeys.sort((a, b) => a.timestamp - b.timestamp);
-      const toRemove = cacheKeys.slice(0, cacheKeys.length - MAX_CACHE_SIZE);
+    if (cacheMetadata.length > MAX_CACHE_SIZE) {
+      // Sort by timestamp (oldest first)
+      cacheMetadata.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Remove oldest entries
+      const toRemove = cacheMetadata.splice(0, cacheMetadata.length - MAX_CACHE_SIZE);
 
       toRemove.forEach(entry => {
         localStorage.removeItem(entry.key);
       });
 
-      console.log(`Cleaned up ${toRemove.length} old cache entries`);
+      // Save updated metadata
+      saveCacheMetadata();
+
+      console.log(`[ImageCache] Cleaned up ${toRemove.length} old cache entries (kept ${cacheMetadata.length}/${MAX_CACHE_SIZE})`);
+    } else {
+      // Save metadata even if no cleanup needed (tracks new additions)
+      saveCacheMetadata();
     }
   } catch (error) {
     console.error('Error cleaning up cache:', error);
@@ -114,20 +163,22 @@ function cleanupCache(): void {
 
 /**
  * Clear all cached images
+ * OPTIMIZATION: Uses metadata instead of scanning all keys
  */
 export function clearImageCache(): void {
+  initCacheMetadata(); // Ensure metadata is loaded
+
   try {
-    const keysToRemove: string[] = [];
+    // Remove all cache entries using metadata
+    cacheMetadata.forEach(entry => {
+      localStorage.removeItem(entry.key);
+    });
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(CACHE_KEY_PREFIX)) {
-        keysToRemove.push(key);
-      }
-    }
+    const count = cacheMetadata.length;
+    cacheMetadata = [];
+    localStorage.removeItem(CACHE_METADATA_KEY);
 
-    keysToRemove.forEach(key => localStorage.removeItem(key));
-    console.log(`Cleared ${keysToRemove.length} cached images`);
+    console.log(`[ImageCache] Cleared ${count} cached images`);
   } catch (error) {
     console.error('Error clearing cache:', error);
   }
@@ -135,28 +186,22 @@ export function clearImageCache(): void {
 
 /**
  * Get cache statistics
+ * OPTIMIZATION: Uses metadata instead of O(n) localStorage loop
  */
 export function getCacheStats(): { count: number; oldestTimestamp: number; newestTimestamp: number } {
-  let count = 0;
+  initCacheMetadata(); // Ensure metadata is loaded
+
   let oldest = Date.now();
   let newest = 0;
 
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(CACHE_KEY_PREFIX)) {
-        count++;
-        const cached = localStorage.getItem(key);
-        if (cached) {
-          const data: CachedImage = JSON.parse(cached);
-          oldest = Math.min(oldest, data.timestamp);
-          newest = Math.max(newest, data.timestamp);
-        }
-      }
-    }
+    cacheMetadata.forEach(entry => {
+      oldest = Math.min(oldest, entry.timestamp);
+      newest = Math.max(newest, entry.timestamp);
+    });
   } catch (error) {
     console.error('Error getting cache stats:', error);
   }
 
-  return { count, oldestTimestamp: oldest, newestTimestamp: newest };
+  return { count: cacheMetadata.length, oldestTimestamp: oldest, newestTimestamp: newest };
 }

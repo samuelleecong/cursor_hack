@@ -105,17 +105,56 @@ export class RoomCache {
       data.rooms[room.id] = room;
       data.timestamp = Date.now();
 
+      // Implement LRU eviction: Keep only the 5 most recent rooms
+      const roomIds = Object.keys(data.rooms);
+      if (roomIds.length > 5) {
+        // Sort by room number (extract from room_X format)
+        roomIds.sort((a, b) => {
+          const numA = parseInt(a.split('_')[1] || '0');
+          const numB = parseInt(b.split('_')[1] || '0');
+          return numA - numB;
+        });
+        // Remove oldest rooms (keep last 5)
+        const toRemove = roomIds.slice(0, roomIds.length - 5);
+        toRemove.forEach(id => delete data.rooms[id]);
+        console.log(`[RoomCache] Evicted ${toRemove.length} old rooms (LRU policy)`);
+      }
+
       localStorage.setItem(ROOM_CACHE_KEY, JSON.stringify(data));
       console.log(`[RoomCache] Saved ${room.id} to cache`);
     } catch (error) {
-      console.error('[RoomCache] Failed to save room:', error);
+      // Handle QuotaExceededError specifically
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        console.warn('[RoomCache] Storage quota exceeded, clearing cache...');
+        this.clear();
+        // Try one more time with just this room
+        try {
+          const freshData: CachedRoomData = {
+            version: CACHE_VERSION,
+            storySeed: this.storySeed,
+            rooms: { [room.id]: room },
+            timestamp: Date.now(),
+          };
+          localStorage.setItem(ROOM_CACHE_KEY, JSON.stringify(freshData));
+          console.log(`[RoomCache] Saved ${room.id} to fresh cache after quota clear`);
+        } catch (retryError) {
+          console.error('[RoomCache] Failed to save even after clearing cache:', retryError);
+        }
+      } else {
+        console.error('[RoomCache] Failed to save room:', error);
+      }
     }
   }
 
   saveRooms(rooms: Map<string, Room>): void {
     try {
       const roomsObj: { [key: string]: Room } = {};
-      rooms.forEach((room, id) => {
+
+      // Only cache the 5 most recent rooms to prevent quota issues
+      const roomArray = Array.from(rooms.entries());
+      const recentRooms = roomArray.slice(-5);
+
+      recentRooms.forEach(([id, room]) => {
         roomsObj[id] = room;
       });
 
@@ -127,9 +166,15 @@ export class RoomCache {
       };
 
       localStorage.setItem(ROOM_CACHE_KEY, JSON.stringify(data));
-      console.log(`[RoomCache] Saved ${rooms.size} rooms to cache`);
+      console.log(`[RoomCache] Saved ${Object.keys(roomsObj).length} rooms to cache (limited to 5 most recent)`);
     } catch (error) {
-      console.error('[RoomCache] Failed to save rooms:', error);
+      // Handle QuotaExceededError specifically
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        console.warn('[RoomCache] Storage quota exceeded when saving multiple rooms, clearing cache...');
+        this.clear();
+      } else {
+        console.error('[RoomCache] Failed to save rooms:', error);
+      }
     }
   }
 
