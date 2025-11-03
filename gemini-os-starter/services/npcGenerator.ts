@@ -18,7 +18,7 @@ export async function generateNPCDescription(
 
   if (!storyContext) {
     // No story context, return generic
-    return 'traveler, wanderer';
+    return 'individual, person';
   }
 
   const prompt = `You are helping create NPCs for a procedurally generated story-based game.
@@ -52,7 +52,7 @@ NPC Description:`;
       config: {},
     });
 
-    let description = (response.text || 'traveler').trim();
+    let description = (response.text || 'individual').trim();
 
     // Clean up the response
     description = description.replace(/^["']|["']$/g, ''); // Remove quotes
@@ -63,7 +63,7 @@ NPC Description:`;
     return description;
   } catch (error) {
     console.error('[NPCGenerator] Error generating NPC description:', error);
-    return 'traveler, wanderer';
+    return 'individual, person';
   }
 }
 
@@ -80,7 +80,7 @@ export async function generateEnemyDescription(
   const model = GEMINI_MODELS.FLASH_LITE;
 
   if (!storyContext) {
-    return `hostile creature, ${biome} monster`;
+    return `opponent, adversary`;
   }
 
   const prompt = `You are helping create enemies for a procedurally generated story-based game.
@@ -114,7 +114,7 @@ Enemy Description:`;
       config: {},
     });
 
-    let description = (response.text || `hostile creature, ${biome} monster`).trim();
+    let description = (response.text || `opponent, adversary`).trim();
 
     description = description.replace(/^["']|["']$/g, '');
     description = description.split('\n')[0];
@@ -124,7 +124,7 @@ Enemy Description:`;
     return description;
   } catch (error) {
     console.error('[NPCGenerator] Error generating enemy description:', error);
-    return `hostile creature, ${biome} monster`;
+    return `opponent, adversary`;
   }
 }
 
@@ -140,7 +140,7 @@ export async function generateNPCInteractionText(
   const model = GEMINI_MODELS.FLASH_LITE;
 
   if (!storyContext) {
-    return 'A traveler rests here';
+    return 'Someone is here';
   }
 
   const prompt = `Generate a brief interaction text (one sentence, 10-15 words) for encountering this NPC:
@@ -168,7 +168,7 @@ Interaction Text:`;
       config: {},
     });
 
-    let text = (response.text || 'A traveler rests here').trim();
+    let text = (response.text || 'Someone is here').trim();
     text = text.replace(/^["']|["']$/g, '');
     text = text.split('\n')[0];
     text = text.substring(0, 120);
@@ -177,5 +177,62 @@ Interaction Text:`;
   } catch (error) {
     console.error('[NPCGenerator] Error generating interaction text:', error);
     return 'Someone waits here';
+  }
+}
+
+/**
+ * Generate a story-aware item description for a given room
+ */
+export async function generateItemDescription(
+  roomNumber: number,
+  biome: string,
+  storyContext: string | null,
+  storyMode: 'inspiration' | 'recreation' | 'continuation' = 'inspiration'
+): Promise<string> {
+  const model = GEMINI_MODELS.FLASH_LITE;
+
+  if (!storyContext) {
+    return 'collectible, item';
+  }
+
+  const prompt = `You are helping create items for a procedurally generated story-based game.
+
+Story Context: ${storyContext}
+Story Mode: ${storyMode}
+Current Location: Room ${roomNumber} in a ${biome} environment
+Player Progress: ${roomNumber === 0 ? 'Just starting' : `${roomNumber} rooms in`}
+
+Based on the story context, generate ONE item/collectible that fits the narrative.
+
+IMPORTANT RULES:
+- For Recreation mode: Use actual items from the story (e.g., for Messi story: jersey, ball, trophy, water bottle, cleats)
+- For Continuation mode: Use items that fit the world after the story
+- For Inspiration mode: Use item TYPES inspired by story themes (e.g., equipment, supplies, rewards)
+- Make it thematically appropriate (sports story = sports equipment NOT magic potions, sci-fi = tech gear NOT treasure chests)
+- Keep description 2-4 words for sprite generation
+
+Examples: "sports trophy", "equipment bag", "medical kit", "tech module", "documents folder", "supplies crate"
+
+Item Description:`;
+
+  try {
+    const ai = getGeminiClient();
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: {},
+    });
+
+    let description = (response.text || 'collectible, item').trim();
+
+    description = description.replace(/^["']|["']$/g, '');
+    description = description.split('\n')[0];
+    description = description.substring(0, 50);
+
+    console.log(`[NPCGenerator] Generated item description for room ${roomNumber}: "${description}"`);
+    return description;
+  } catch (error) {
+    console.error('[NPCGenerator] Error generating item description:', error);
+    return 'collectible, item';
   }
 }

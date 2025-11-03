@@ -234,16 +234,13 @@ export async function generateBiomeProgression(
   const model = GEMINI_MODELS.FLASH_LITE;
 
   if (!isApiKeyConfigured()) {
-    // Fallback to default progression
-    return Array(roomCount).fill('forest');
+    // Fallback to generic location progression
+    return Array.from({ length: roomCount }, (_, i) => `location_${i + 1}`);
   }
 
   const contextDescription = storyContext
     ? `Story: "${storyContext.slice(0, 500)}..." (${storyMode} mode - ${roomCount} rooms)`
-    : 'Generic fantasy adventure';
-
-  const isFantasyStory = !storyContext ||
-    /fantasy|magic|dragon|dungeon|medieval|sword|wizard|elf|dwarf/i.test(storyContext);
+    : 'Generic adventure (determine genre from gameplay)';
 
   const recreationNote = storyMode === 'recreation'
     ? `\n**RECREATION MODE (5 rooms):** Each location should represent a KEY STORY MOMENT from the narrative. Focus on the most important scenes.`
@@ -255,18 +252,18 @@ ${contextDescription}
 
 IMPORTANT: Create location names that FIT THE STORY CONTEXT!${recreationNote}
 
-${isFantasyStory ? `
-For fantasy stories, you can use these pre-made biomes:
-forest, swamp, desert, ice, cave, dungeon, plains, castle, volcanic, beach, darkforest, crystalcave, ruins, city, space
-` : `
-For NON-FANTASY stories (modern, sports, sci-fi, historical, etc.), CREATE CUSTOM LOCATION NAMES that match the story!
+**LOCATION STRATEGY:**
+- ANALYZE the story to determine its genre (sports, modern, sci-fi, historical, fantasy, horror, etc.)
+- CREATE CUSTOM LOCATION NAMES that match the specific story genre and setting
+- You can use pre-made biomes (forest, swamp, desert, ice, cave, dungeon, plains, castle, volcanic, beach, darkforest, crystalcave, ruins, city, space) ONLY if they truly fit the story
+- For non-fantasy stories, CREATE UNIQUE location names that match the narrative
 
-Examples:
+**Examples by Genre:**
 - Soccer/Football story: "training_ground", "local_stadium", "national_championship", "world_cup_qualifier", "world_cup_final"
 - Modern thriller: "apartment", "office_building", "subway", "warehouse", "penthouse"
 - Space story: "space_station", "cargo_bay", "engine_room", "command_center", "alien_ship"
 - Historical: "village", "market", "palace", "battlefield", "throne_room"
-`}
+- Fantasy: "forest", "castle", "dungeon", "crystal_cave", "dark_tower"
 
 Create a logical progression that:
 1. Starts appropriate to the story setting (e.g., training ground for sports, apartment for thriller)
@@ -319,12 +316,7 @@ ${storyMode === 'recreation' ? `Example for "Lionel Messi winning World Cup" (5 
   } catch (error) {
     console.error('[GeminiService] Error generating biome progression:', error);
 
-    // Fallback to default progression
-    return [
-      'forest', 'forest', 'plains', 'plains', 'darkforest',
-      'cave', 'cave', 'desert', 'desert', 'ruins',
-      'dungeon', 'dungeon', 'dungeon', 'castle', 'castle',
-      'volcanic', 'volcanic', 'volcanic', 'dungeon', 'dungeon'
-    ];
+    // Fallback to generic location progression
+    return Array.from({ length: roomCount }, (_, i) => `location_${i + 1}`);
   }
 }

@@ -1175,12 +1175,35 @@ const App: React.FC = () => {
       let newHP = gameState.currentHP;
 
       // Handle animations and HP changes based on choice type
-      if (choiceType === 'combat' || choiceType === 'damage') {
+      if (choiceType === 'combat') {
+        // Combat choice - player attacks enemy
         const damage = value || 10;
-        newHP = Math.max(0, gameState.currentHP - damage);
-        
+
         eventLogger.logEvent(
           'combat',
+          gameState.currentRoomId,
+          gameState.level,
+          gameState.currentHP,
+          choiceText,
+          { choiceId, choiceType, damageDealt: damage }
+        );
+
+        setGameState((prev) => ({
+          ...prev,
+          currentAnimation: {
+            type: 'combat',
+            value: damage,
+            text: `Dealt ${damage} damage!`,
+            timestamp: Date.now(),
+          },
+        }));
+      } else if (choiceType === 'damage') {
+        // Damage choice - player takes damage (enemy counterattack, trap, etc.)
+        const damage = value || 10;
+        newHP = Math.max(0, gameState.currentHP - damage);
+
+        eventLogger.logEvent(
+          'damage_taken',
           gameState.currentRoomId,
           gameState.level,
           newHP,

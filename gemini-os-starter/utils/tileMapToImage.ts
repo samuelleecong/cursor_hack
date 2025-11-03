@@ -95,8 +95,8 @@ export function tileMapToReferenceImage(tileMap: TileMap): string {
 /**
  * Convert tile map to a Blob for efficient upload to fal.ai
  * ENHANCED: Creates INPAINTING-COMPLIANT MASK following industry standards
- * WHITE = Areas to MODIFY/GENERATE (walkable paths)
- * BLACK = Areas to PRESERVE/BLOCK (obstacles, non-walkable zones)
+ * BLACK = Areas showing WALKABLE PATHS (preserve layout, style with terrain)
+ * WHITE = Areas to GENERATE (fill with obstacles, vegetation, environment)
  */
 export async function tileMapToBlob(tileMap: TileMap): Promise<Blob> {
   const canvas = document.createElement('canvas');
@@ -112,12 +112,12 @@ export async function tileMapToBlob(tileMap: TileMap): Promise<Blob> {
   canvas.width = mapWidth;
   canvas.height = mapHeight;
 
-  // BLACK BACKGROUND - obstacles/non-walkable areas (areas AI should fill with environment)
-  ctx.fillStyle = '#000000';
+  // WHITE BACKGROUND - obstacles/non-walkable areas (areas AI should fill with environment)
+  ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, mapWidth, mapHeight);
 
-  // Draw walkable tiles as WHITE areas (areas AI should style as paths)
-  ctx.fillStyle = '#FFFFFF';
+  // Draw walkable tiles as BLACK areas (areas AI should style as paths)
+  ctx.fillStyle = '#000000';
   for (let y = 0; y < tileMap.height; y++) {
     for (let x = 0; x < tileMap.width; x++) {
       const tile = tileMap.tiles[y][x];
@@ -129,11 +129,11 @@ export async function tileMapToBlob(tileMap: TileMap): Promise<Blob> {
     }
   }
 
-  // THICK WHITE PATH OVERLAY for maximum clarity
+  // THICK BLACK PATH OVERLAY for maximum clarity
   // This reinforces the SACRED LAYOUT that must be preserved
   if (tileMap.pathPoints.length > 1) {
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = tileMap.tileSize * 2.0; // Thick white path
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = tileMap.tileSize * 2.0; // Thick black path
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -145,8 +145,8 @@ export async function tileMapToBlob(tileMap: TileMap): Promise<Blob> {
     ctx.stroke();
   }
 
-  // Overlay path points with WHITE filled circles for extra emphasis
-  ctx.fillStyle = '#FFFFFF';
+  // Overlay path points with BLACK filled circles for extra emphasis
+  ctx.fillStyle = '#000000';
   tileMap.pathPoints.forEach((point) => {
     ctx.beginPath();
     ctx.arc(point.x, point.y, tileMap.tileSize * 0.7, 0, Math.PI * 2);
@@ -171,7 +171,7 @@ export async function tileMapToBlob(tileMap: TileMap): Promise<Blob> {
     ctx.filter = 'none';
   }
 
-  console.log(`[TileMapToImage] Created INPAINTING MASK: ${tileMap.pathPoints.length} path points, BLACK background with WHITE walkable paths (feathered edges)`);
+  console.log(`[TileMapToImage] Created INPAINTING MASK: ${tileMap.pathPoints.length} path points, WHITE background with BLACK walkable paths (feathered edges)`);
 
   // Convert canvas to Blob (more efficient than data URL)
   return new Promise<Blob>((resolve, reject) => {
@@ -242,8 +242,8 @@ export function combineTileMapsAsPanorama(
   canvas.width = 2000;
   canvas.height = 800;
 
-  // BLACK BACKGROUND - non-walkable areas (obstacles/environment)
-  ctx.fillStyle = '#000000';
+  // WHITE BACKGROUND - non-walkable areas (obstacles/environment)
+  ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, 2000, 800);
 
   console.log('[CombinePanorama] Drawing left tile map (0-1000px)...');
@@ -271,7 +271,7 @@ export function combineTileMapsAsPanorama(
     ctx.filter = 'none';
   }
 
-  console.log('[CombinePanorama] Panorama inpainting mask created: 2000x800 with WHITE paths on BLACK background (feathered)');
+  console.log('[CombinePanorama] Panorama inpainting mask created: 2000x800 with BLACK paths on WHITE background (feathered)');
 
   // Convert to data URL
   return canvas.toDataURL('image/png');
@@ -279,7 +279,7 @@ export function combineTileMapsAsPanorama(
 
 /**
  * Helper: Draw an inpainting-compliant path mask on canvas at specified offset
- * WHITE = walkable paths (areas to generate), BLACK = obstacles (areas to preserve)
+ * BLACK = walkable paths (areas to generate), WHITE = obstacles (areas to preserve)
  */
 function drawPurePathMask(
   ctx: CanvasRenderingContext2D,
@@ -290,8 +290,8 @@ function drawPurePathMask(
   const mapWidth = tileMap.width * tileMap.tileSize;
   const mapHeight = tileMap.height * tileMap.tileSize;
 
-  // Draw walkable tiles as WHITE areas (areas AI should style as paths)
-  ctx.fillStyle = '#FFFFFF';
+  // Draw walkable tiles as BLACK areas (areas AI should style as paths)
+  ctx.fillStyle = '#000000';
   for (let y = 0; y < tileMap.height; y++) {
     for (let x = 0; x < tileMap.width; x++) {
       const tile = tileMap.tiles[y][x];
@@ -303,9 +303,9 @@ function drawPurePathMask(
     }
   }
 
-  // THICK WHITE PATH OVERLAY for maximum clarity
+  // THICK BLACK PATH OVERLAY for maximum clarity
   if (tileMap.pathPoints.length > 1) {
-    ctx.strokeStyle = '#FFFFFF';
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = tileMap.tileSize * 2.0;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -318,8 +318,8 @@ function drawPurePathMask(
     ctx.stroke();
   }
 
-  // Overlay path points with WHITE filled circles for extra emphasis
-  ctx.fillStyle = '#FFFFFF';
+  // Overlay path points with BLACK filled circles for extra emphasis
+  ctx.fillStyle = '#000000';
   tileMap.pathPoints.forEach((point) => {
     ctx.beginPath();
     ctx.arc(offsetX + point.x, offsetY + point.y, tileMap.tileSize * 0.7, 0, Math.PI * 2);

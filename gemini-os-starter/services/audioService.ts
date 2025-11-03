@@ -92,9 +92,6 @@ const extractGenre = (storyContext: string | null): string => {
   if (text.includes('western') || text.includes('cowboy') || text.includes('frontier')) {
     return 'western';
   }
-  if (text.includes('medieval') || text.includes('kingdom') || text.includes('magic') || text.includes('dragon')) {
-    return 'medieval fantasy';
-  }
   if (text.includes('noir') || text.includes('detective') || text.includes('mystery')) {
     return 'noir jazz';
   }
@@ -115,11 +112,6 @@ const extractGenre = (storyContext: string | null): string => {
   }
   if (text.includes('historical') || text.includes('history') || text.includes('past')) {
     return 'historical drama';
-  }
-
-  // Check for fantasy keywords as one of many genre options (not default)
-  if (text.includes('fantasy') || text.includes('magic') || text.includes('wizard') || text.includes('elf') || text.includes('dwarf')) {
-    return 'fantasy adventure';
   }
 
   return 'cinematic adventure';
@@ -267,7 +259,7 @@ const buildBattleMusicPrompt = async (context: MusicGenerationContext): Promise<
   const enemy = context.battleState?.enemy;
 
   if (!enemy) {
-    return `${genre} combat music. Epic, intense, orchestral battle theme.`;
+    return `${genre} combat music. Epic, intense battle theme.`;
   }
 
   const enemyType = enemy.type || 'enemy';
@@ -282,8 +274,8 @@ const buildBattleMusicPrompt = async (context: MusicGenerationContext): Promise<
     `Music for ${genre} ${enemyType} battle.`,
     `${intensity} combat.`,
     `${characterClass} vs ${enemy.sprite || enemyType}.`,
-    'Epic orchestral battle theme with dynamic percussion.',
-    'Heroic, energetic, game soundtrack.',
+    'Battle theme with dynamic energy and tension.',
+    'Intense, energetic, game soundtrack.',
     'SEAMLESSLY LOOPABLE. Short loop, no fade in/out, perfect loop points.',
   ];
 
@@ -361,7 +353,7 @@ export const getMusicForContext = async (
       } else {
         genre = extractGenre(context.storyContext);
       }
-      prompt = `${genre} victory fanfare. Triumphant, celebratory, heroic. Epic orchestral game soundtrack. SEAMLESSLY LOOPABLE, no fade in/out.`;
+      prompt = `${genre} victory fanfare. Triumphant, celebratory, heroic. Game soundtrack. SEAMLESSLY LOOPABLE, no fade in/out.`;
       generator = generateBattleMusic;
       cacheKey = 'victory';
       break;
@@ -382,7 +374,7 @@ export const getMusicForContext = async (
     }
 
     default:
-      prompt = 'Ambient fantasy music for exploration. Mysterious, atmospheric. SEAMLESSLY LOOPABLE with perfect loop points, no fade in/out.';
+      prompt = 'Ambient exploration music. Mysterious, atmospheric, neutral tone. SEAMLESSLY LOOPABLE with perfect loop points, no fade in/out.';
       generator = generateRoomMusic;
       cacheKey = 'default';
   }

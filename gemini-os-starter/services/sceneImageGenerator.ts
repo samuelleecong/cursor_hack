@@ -90,7 +90,7 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
     atmosphereHints += `Signs of civilization and friendly inhabitants. `;
   }
   if (items.length > 0) {
-    atmosphereHints += `Hints of treasure and discovery. `;
+    atmosphereHints += `Hints of valuable items and discovery. `;
   }
 
   // Story context integration - THEME ONLY (CRITICAL for non-fantasy stories)
@@ -102,22 +102,20 @@ function buildScenePromptRequest(params: SceneGenerationParams): string {
       inspiration: 'Capture the color palette, mood, and aesthetic themes. Every visual must feel authentic to this setting.',
     };
 
-    const fantasySignals = /(wizard|magic|spell|dragon|sorcerer|witch|mage|necromancer|demon|ghost|spirit|specter|enchanted|paladin|elf|dwarf|orc|goblin)/i;
-    const isExplicitFantasy = fantasySignals.test(storyContext);
-
     storySection = `
 **CRITICAL STORY CONTEXT (${storyMode || 'inspiration'} mode):**
 "${storyContext.substring(0, 400)}..."
 
-MANDATORY REQUIREMENT: The visual style MUST reflect this specific story setting, NOT generic fantasy.
+MANDATORY REQUIREMENT: The visual style MUST reflect this specific story setting.
 ${modeInstructions[storyMode || 'inspiration']}
-If this is a modern, sports, sci-fi, or non-fantasy setting, DO NOT use medieval/fantasy visuals.
-${!isExplicitFantasy ? `
-ABSOLUTE RESTRICTION: This narrative contains no supernatural or magical elements.
-- Avoid ghosts, spirits, glowing runes, magical auras, floating particles, or mythic creatures.
-- Use real-world lighting sources (stadium lights, office fixtures, street lamps, etc.).
-- Architecture, props, and costumes must belong to the story's actual genre and era.
-` : ''}
+
+IMPORTANT GENRE MATCHING:
+- ANALYZE the story to determine its genre (sports, modern, sci-fi, historical, fantasy, horror, etc.)
+- Use visual elements appropriate to the identified genre
+- DO NOT default to medieval/fantasy visuals unless the story explicitly takes place in a fantasy setting
+- For non-fantasy stories: avoid magical effects, glowing runes, mythical creatures, fantasy architecture
+- Use lighting appropriate to the setting (stadium lights for sports, office fixtures for modern, etc.)
+- Architecture, props, and costumes must match the story's actual genre and time period
 `;
   }
 
@@ -129,6 +127,14 @@ ABSOLUTE RESTRICTION: This narrative contains no supernatural or magical element
   return `You are a visual style consultant for pixel art game scenes.
 
 ${storySection}
+
+CRITICAL PERSPECTIVE REQUIREMENT:
+This is a TOP-DOWN VIEW (bird's eye view) looking DIRECTLY DOWN from above at a 90-degree angle.
+- The camera is positioned directly overhead, perpendicular to the ground
+- NO isometric angle, NO 3/4 view, NO side angle
+- Think classic 2D RPG like early Zelda, Pokemon, or Stardew Valley
+- All objects, paths, and terrain are seen from directly above
+- The horizon is NOT visible - everything is viewed from straight overhead
 
 LOCATION: ${biomeName} (Room ${roomNumber})
 DESCRIPTION: ${description}
@@ -142,18 +148,21 @@ ${pathDescription}
 ${storyContext ? `\n**REMINDER: This is "${biomeName}" from the story context above. The visual style must match that narrative setting, not default to generic fantasy.**\n` : ''}
 
 Generate a detailed prompt for pixel art scene generation. Include:
+- PERSPECTIVE: Specify "top-down view" or "bird's eye view directly from above" at the start
 - The path description exactly as specified above, with visual styling appropriate to the setting
 - Color palette (what colors dominate the scene?)
 - Texture and materials (appropriate to the story setting - could be grass, concrete, metal, sand, etc.)
 - Lighting and mood (bright, dark, mysterious, welcoming?)
 - Atmospheric effects (fog, sunbeams, shadows, particle effects?)
 - Environmental richness (describe what fills the non-path areas - trees, rocks, buildings, crowds, etc.)
-- Art style consistency (16-bit RPG, Stardew Valley aesthetic, retro gaming)
+- Art style consistency (16-bit RPG, Stardew Valley aesthetic, retro gaming, always from top-down perspective)
 ${storyContext ? '- Setting authenticity (ensure visuals match the narrative context)' : ''}
 
 IMPORTANT: The walkable path must follow the trajectory described in the PATH LAYOUT DESCRIPTION. Describe it with appropriate visual styling for the setting.
 
-Output format: Single paragraph, 2-3 sentences including the path description.`;
+CRITICAL REMINDER: Start your prompt with "Top-down view" or "Bird's eye view directly from above" to ensure proper perspective.
+
+Output format: Single paragraph, 2-3 sentences including the path description and perspective specification.`;
 }
 
 /**
@@ -323,8 +332,8 @@ export async function generateScenePanorama(
     const currentPath = currentRoomParams.tileMap?.pathDescription?.fullDescription || '';
     const nextPath = nextRoomParams.tileMap?.pathDescription?.fullDescription || '';
 
-    const panoramaPrompt = `LEFT SECTION: ${currentImagePrompt} Path layout: ${currentPath} | RIGHT SECTION: ${nextImagePrompt} Path layout: ${nextPath}
-Seamlessly blended artistic styles with unified lighting and color harmony. Natural visual transition between areas where the paths connect.`;
+    const panoramaPrompt = `Top-down view (bird's eye, directly from above): LEFT SECTION: ${currentImagePrompt} Path layout: ${currentPath} | RIGHT SECTION: ${nextImagePrompt} Path layout: ${nextPath}
+Seamlessly blended artistic styles with unified lighting and color harmony. Natural visual transition between areas where the paths connect. Maintain strict top-down perspective across the entire panorama.`;
 
     console.log(`[SceneGen] Panorama prompt: ${panoramaPrompt.substring(0, 200)}...`);
 

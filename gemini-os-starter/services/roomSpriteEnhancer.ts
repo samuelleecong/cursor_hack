@@ -5,7 +5,7 @@
 /* tslint:disable */
 import { GameObject, Room } from '../types';
 import { generateEnemySprite, generateNPCSprite, generateItemSprite } from './spriteGenerator';
-import { generateNPCDescription, generateEnemyDescription } from './npcGenerator';
+import { generateNPCDescription, generateEnemyDescription, generateItemDescription } from './npcGenerator';
 
 async function preloadSpriteImage(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -83,12 +83,19 @@ export async function enhanceRoomWithSprites(
           enhancedObj.spriteUrl = sprite.url || undefined;
           console.log(`[RoomSpriteEnhancer] ✅ NPC sprite generated: ${sprite.url?.substring(0, 60)}...`);
         } else if (obj.type === 'item') {
-          const itemDescription = 'treasure, collectible';
+          // Generate story-aware item description
+          const itemDescription = await generateItemDescription(
+            extractedRoomNumber,
+            biome,
+            storyContext,
+            storyMode || 'inspiration'
+          );
           const sprite = await generateItemSprite(
             itemDescription,
-            'glowing game item',
+            'game item',
             obj.sprite,
-            biome
+            biome,
+            storyContext || undefined
           );
           enhancedObj.spriteUrl = sprite.url || undefined;
           console.log(`[RoomSpriteEnhancer] ✅ Item sprite generated: ${sprite.url?.substring(0, 60)}...`);
@@ -175,12 +182,18 @@ export async function enhanceObjectWithSprite(
       );
       enhanced.spriteUrl = sprite.url || undefined;
     } else if (obj.type === 'item') {
-      const itemDescription = 'treasure, collectible';
+      const itemDescription = await generateItemDescription(
+        roomNumber || 0,
+        biome,
+        storyContext || null,
+        storyMode || 'inspiration'
+      );
       const sprite = await generateItemSprite(
         itemDescription,
-        'glowing game item',
+        'game item',
         obj.sprite,
-        biome
+        biome,
+        storyContext
       );
       enhanced.spriteUrl = sprite.url || undefined;
     }

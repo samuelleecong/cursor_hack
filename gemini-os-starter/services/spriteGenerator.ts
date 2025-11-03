@@ -224,15 +224,17 @@ export async function generateItemSprite(
   itemName: string,
   itemDescription: string,
   fallbackEmoji: string,
-  biome?: string
+  biome?: string,
+  storyContext?: string
 ): Promise<GeneratedSprite> {
   const description = `${itemName}, ${itemDescription}`;
-  
+
   return generateSprite({
     description,
     type: 'item',
     biome,
     fallbackEmoji,
+    storyContext,
   });
 }
 

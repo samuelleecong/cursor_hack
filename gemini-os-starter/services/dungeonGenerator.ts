@@ -269,7 +269,7 @@ function assignRoomTypes(
   cells[boss.gridY][boss.gridX].roomType = 'boss';
 
   // Determine counts for special rooms
-  const numTreasure = random.nextInt(8, 12);
+  const numReward = random.nextInt(8, 12);
   const numSafe = random.nextInt(4, 6);
   const numPuzzle = random.nextInt(4, 6);
 
@@ -285,14 +285,14 @@ function assignRoomTypes(
   // Assign special room types
   let index = 0;
 
-  // Treasure rooms (prefer branch ends and corners)
+  // Reward rooms (prefer branch ends and corners)
   const branchEnds = shuffled.filter((cell) => {
     const exitCount = [cell.exits.north, cell.exits.south, cell.exits.east, cell.exits.west].filter(Boolean).length;
     return exitCount === 1 && !cell.isOnMainPath;
   });
 
-  for (let i = 0; i < Math.min(numTreasure, branchEnds.length); i++) {
-    branchEnds[i].roomType = 'treasure';
+  for (let i = 0; i < Math.min(numReward, branchEnds.length); i++) {
+    branchEnds[i].roomType = 'reward';
   }
 
   // Safe rooms (place along main path for rest stops)

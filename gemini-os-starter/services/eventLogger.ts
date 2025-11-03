@@ -10,7 +10,7 @@ export interface GameEvent {
   type:
     | 'combat'
     | 'dialogue'
-    | 'loot'
+    | 'item_acquired'
     | 'exploration'
     | 'death'
     | 'levelup'
@@ -151,7 +151,7 @@ class EventLoggerService {
 
     const combatEvents = recentEvents.filter(e => e.type === 'combat' || e.type === 'battle_end');
     const npcEvents = recentEvents.filter(e => e.type === 'npc_interaction' || e.type === 'dialogue');
-    const lootEvents = recentEvents.filter(e => e.type === 'loot' || e.type === 'item_acquired');
+    const lootEvents = recentEvents.filter(e => e.type === 'item_acquired');
     const choiceEvents = recentEvents.filter(e => e.type === 'choice');
     const storyScenes = recentEvents.filter(e => e.type === 'story_scene');
 

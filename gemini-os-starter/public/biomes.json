@@ -178,5 +178,101 @@
       "obstacles": ["#1e293b", "#92400e", "#27272a"]
     },
     "atmosphere": "High-tech space station with metallic corridors and blinking consoles"
+  },
+  "indoor": {
+    "name": "Indoor",
+    "baseTile": "floor",
+    "pathTile": "corridor",
+    "obstacleTiles": ["wall", "furniture", "decoration"],
+    "colors": {
+      "base": "#e7e5e4",
+      "path": "#d6d3d1",
+      "obstacles": ["#78716c", "#92400e", "#a1a1aa"]
+    },
+    "atmosphere": "Generic indoor space with walls and furnishings"
+  },
+  "outdoor": {
+    "name": "Outdoor",
+    "baseTile": "ground",
+    "pathTile": "path",
+    "obstacleTiles": ["vegetation", "object", "terrain"],
+    "colors": {
+      "base": "#84cc16",
+      "path": "#a8a29e",
+      "obstacles": ["#22c55e", "#92400e", "#78716c"]
+    },
+    "atmosphere": "Open outdoor area with natural elements"
+  },
+  "facility": {
+    "name": "Facility",
+    "baseTile": "concreteFloor",
+    "pathTile": "walkway",
+    "obstacleTiles": ["equipment", "barrier", "structure"],
+    "colors": {
+      "base": "#a8a29e",
+      "path": "#d6d3d1",
+      "obstacles": ["#71717a", "#52525b", "#27272a"]
+    },
+    "atmosphere": "Industrial or institutional facility with functional architecture"
+  },
+  "arena": {
+    "name": "Arena",
+    "baseTile": "floor",
+    "pathTile": "court",
+    "obstacleTiles": ["seating", "equipment", "boundary"],
+    "colors": {
+      "base": "#f59e0b",
+      "path": "#fbbf24",
+      "obstacles": ["#dc2626", "#3b82f6", "#71717a"]
+    },
+    "atmosphere": "Competition arena with spectator seating and marked boundaries"
+  },
+  "office": {
+    "name": "Office",
+    "baseTile": "carpet",
+    "pathTile": "aisle",
+    "obstacleTiles": ["desk", "cubicle", "plant"],
+    "colors": {
+      "base": "#e0e7ff",
+      "path": "#c7d2fe",
+      "obstacles": ["#92400e", "#22c55e", "#71717a"]
+    },
+    "atmosphere": "Modern office space with workstations and corporate decor"
+  },
+  "laboratory": {
+    "name": "Laboratory",
+    "baseTile": "tile",
+    "pathTile": "cleanRoom",
+    "obstacleTiles": ["equipment", "bench", "storage"],
+    "colors": {
+      "base": "#f0fdfa",
+      "path": "#ccfbf1",
+      "obstacles": ["#71717a", "#3b82f6", "#e7e5e4"]
+    },
+    "atmosphere": "Scientific laboratory with sterile surfaces and research equipment"
+  },
+  "stadium": {
+    "name": "Stadium",
+    "baseTile": "field",
+    "pathTile": "track",
+    "obstacleTiles": ["stands", "scoreboard", "goal"],
+    "colors": {
+      "base": "#22c55e",
+      "path": "#dc2626",
+      "obstacles": ["#3b82f6", "#fbbf24", "#71717a"]
+    },
+    "atmosphere": "Sports stadium with expansive field and roaring crowd atmosphere"
+  },
+  "suburban": {
+    "name": "Suburban",
+    "baseTile": "lawn",
+    "pathTile": "sidewalk",
+    "obstacleTiles": ["house", "tree", "fence"],
+    "colors": {
+      "base": "#84cc16",
+      "path": "#a8a29e",
+      "obstacles": ["#dc2626", "#22c55e", "#78716c"]
+    },
+    "atmosphere": "Quiet suburban neighborhood with houses and manicured lawns"
   }
 }

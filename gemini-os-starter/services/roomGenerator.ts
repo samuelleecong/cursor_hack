@@ -246,7 +246,7 @@ export async function generateRoom(
   const objects: GameObject[] = [];
 
   // Determine room type and difficulty
-  const roomTypes = ['combat', 'peaceful', 'treasure', 'puzzle', 'mixed'];
+  const roomTypes = ['combat', 'peaceful', 'reward', 'puzzle', 'mixed'];
   const roomType = roomNumber === 0 ? 'peaceful' : randomChoice(roomTypes);
 
   // Generate description based on story beat (recreation mode) or room type
@@ -268,8 +268,8 @@ export async function generateRoom(
       case 'peaceful':
         description = `🌿 ${biomeName} - Safe Haven`;
         break;
-      case 'treasure':
-        description = `✨ ${biomeName} - Treasure Found`;
+      case 'reward':
+        description = `✨ ${biomeName} - Rewards Found`;
         break;
       case 'puzzle':
         description = `🧩 ${biomeName} - Strategic Challenge`;
@@ -439,7 +439,7 @@ export async function generateRoom(
     }
   }
 
-  if (roomType === 'treasure' || roomType === 'mixed' || roomType === 'puzzle') {
+  if (roomType === 'reward' || roomType === 'mixed' || roomType === 'puzzle') {
     const numItems = randomInt(2, 4);
     for (let i = 0; i < numItems && i < safePathPoints.length; i++) {
       // Use collision-aware placement
@@ -512,8 +512,8 @@ export function generateRoomDescription(
 
   if (hasEnemies && hasNPCs) return '⚔️ A tense area with both friends and foes';
   if (hasEnemies) return '⚔️ Danger ahead - enemies detected';
-  if (hasNPCs && hasItems) return '🏛️ A settlement with traders and treasures';
+  if (hasNPCs && hasItems) return '🏛️ A settlement with traders and rewards';
   if (hasNPCs) return '🏘️ A peaceful area with inhabitants';
-  if (hasItems) return '✨ A treasure chamber awaits';
+  if (hasItems) return '✨ A reward chamber awaits';
   return '🌿 A mysterious empty area';
 }

@@ -140,11 +140,11 @@ export async function generatePixelArt(params: ImageGenerationParams): Promise<G
 
 CRITICAL REFERENCE IMAGE INTERPRETATION:
 The reference image is an INPAINTING MASK following industry standards where:
-- WHITE areas = WALKABLE PATHS to generate with appropriate terrain (dirt paths, stone walkways, grass trails, wooden bridges, or other biome-appropriate walkable surfaces matching the scene's style and color palette)
-- BLACK areas = NON-WALKABLE TERRAIN to fill with obstacles, vegetation, or environmental features appropriate to the biome
-- The path layout (shape/position) shown in white must be preserved EXACTLY while styling it with realistic terrain
-- Fill black areas completely with rich environmental details—no empty voids or black background showing
-- Examples: Forest = dirt path with moss edges surrounded by dense trees; Desert = sandy trail with cacti and rocks; Dungeon = stone floor with wall obstacles; Cave = smooth rock path with stalagmites`;
+- BLACK areas = WALKABLE PATHS showing EXACTLY where the path should be. Style these with appropriate terrain (dirt paths, stone walkways, grass trails, wooden bridges, or other biome-appropriate walkable surfaces matching the scene's style and color palette). The BLACK path layout must be preserved EXACTLY—only style it, don't reshape it.
+- WHITE areas = AREAS TO GENERATE. Fill completely with obstacles, vegetation, or environmental features appropriate to the biome. Create rich environmental details matching the scene's style—no empty voids or white background showing.
+- Preserve the exact path layout (shape/position) shown in BLACK while styling it with realistic, biome-appropriate terrain textures
+- Fill WHITE areas completely with dense environmental details that match the biome and color palette
+- Examples: Forest = moss-covered dirt path (black area) surrounded by dense trees/bushes (white area); Desert = sandy trail (black) with cacti and rocks (white); Dungeon = stone floor (black) with wall obstacles (white); Cave = smooth rock path (black) with stalagmites (white)`;
 
         console.log(`[falService] Enhanced prompt with inpainting mask interpretation instructions`);
 
@@ -162,7 +162,7 @@ The reference image is an INPAINTING MASK following industry standards where:
         }
 
         console.log(`[falService] Using ${imageUrls.length} reference images for layout anchor system`);
-        console.log(`[falService] Reference images are INPAINTING MASKS (WHITE paths on BLACK obstacles, feathered edges)`);
+        console.log(`[falService] Reference images are INPAINTING MASKS (BLACK paths on WHITE obstacles, feathered edges)`);
 
         result = await fal.subscribe('fal-ai/gemini-25-flash-image/edit', {
           input: {

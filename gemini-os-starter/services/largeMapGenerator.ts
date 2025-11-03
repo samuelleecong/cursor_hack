@@ -125,9 +125,9 @@ function generateEnemiesForScreen(
   let minEnemies = 2 + mapNumber;
   let maxEnemies = 4 + mapNumber * 2;
 
-  if (screenType === 'treasure') {
+  if (screenType === 'reward') {
     minEnemies = 1;
-    maxEnemies = 2; // Fewer enemies in treasure rooms
+    maxEnemies = 2; // Fewer enemies in reward rooms
   } else if (screenType === 'puzzle') {
     minEnemies = 1;
     maxEnemies = 3;
@@ -187,7 +187,7 @@ function generateItemsForScreen(
 
   // Determine item count based on screen type
   let itemCount = 0;
-  if (screenType === 'treasure') {
+  if (screenType === 'reward') {
     itemCount = random.nextInt(4, 6);
   } else if (screenType === 'puzzle') {
     itemCount = random.nextInt(2, 3);
@@ -212,7 +212,7 @@ function generateItemsForScreen(
       },
       type: 'item',
       sprite: random.choice(ITEM_SPRITES),
-      interactionText: 'A valuable treasure!',
+      interactionText: 'A valuable reward!',
       hasInteracted: false,
     });
   }
@@ -346,8 +346,8 @@ function getSpecialRoomLayout(mapNumber: number): Map<string, RoomType> {
     case 1: // Mystic Forest
       layout.set('0,0', 'start');
       layout.set('2,2', 'safe');
-      layout.set('1,3', 'treasure');
-      layout.set('3,1', 'treasure');
+      layout.set('1,3', 'reward');
+      layout.set('3,1', 'reward');
       layout.set('2,4', 'puzzle');
       layout.set('4,2', 'puzzle');
       layout.set('4,4', 'combat'); // Exit portal location
@@ -356,9 +356,9 @@ function getSpecialRoomLayout(mapNumber: number): Map<string, RoomType> {
     case 2: // Scorched Plains
       layout.set('0,0', 'combat'); // Entry
       layout.set('2,2', 'safe');
-      layout.set('1,4', 'treasure');
-      layout.set('4,1', 'treasure');
-      layout.set('3,3', 'treasure');
+      layout.set('1,4', 'reward');
+      layout.set('4,1', 'reward');
+      layout.set('3,3', 'reward');
       layout.set('3,1', 'puzzle');
       layout.set('4,4', 'combat'); // Exit portal location
       break;
@@ -366,8 +366,8 @@ function getSpecialRoomLayout(mapNumber: number): Map<string, RoomType> {
     case 3: // Shadow Caverns
       layout.set('0,0', 'combat'); // Entry
       layout.set('2,2', 'safe');
-      layout.set('1,4', 'treasure');
-      layout.set('4,1', 'treasure');
+      layout.set('1,4', 'reward');
+      layout.set('4,1', 'reward');
       layout.set('2,4', 'puzzle');
       layout.set('4,2', 'puzzle');
       layout.set('4,4', 'combat'); // Exit portal location
@@ -376,7 +376,7 @@ function getSpecialRoomLayout(mapNumber: number): Map<string, RoomType> {
     case 4: // Ancient Ruins
       layout.set('0,0', 'combat'); // Entry
       layout.set('1,1', 'safe');
-      layout.set('2,2', 'treasure');
+      layout.set('2,2', 'reward');
       layout.set('3,3', 'puzzle');
       layout.set('4,4', 'boss'); // FINAL BOSS
       break;
