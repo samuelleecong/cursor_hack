@@ -378,8 +378,8 @@ const App: React.FC = () => {
 
       console.log('[App] Generating initial room pair (0 + 1)...');
 
-      const biomeKey0 = gameState.biomeProgression[0] || 'forest';
-      const biomeKey1 = gameState.biomeProgression[1] || 'forest';
+      const biomeKey0 = gameState.biomeProgression[0] || 'outdoor';
+      const biomeKey1 = gameState.biomeProgression[1] || 'outdoor';
 
       // Initialize event logger
       eventLogger.initialize(character.name, gameState.storySeed);
@@ -560,7 +560,7 @@ const App: React.FC = () => {
       const newRoomCounter = gameState.roomCounter + 1;
       const newRoomId = `room_${newRoomCounter}`;
 
-      const biomeKey = gameState.biomeProgression[newRoomCounter] || 'forest';
+      const biomeKey = gameState.biomeProgression[newRoomCounter] || 'outdoor';
 
       // Check if room already exists (pre-generated in memory or cache)
       let newRoom = gameState.rooms.get(newRoomId) || roomCache.getRoom(newRoomId);
@@ -895,7 +895,7 @@ const App: React.FC = () => {
             throw new Error('Missing required fields in AI response');
           }
 
-          const biomeKey = gameState.biomeProgression[gameState.roomCounter] || 'forest';
+          const biomeKey = gameState.biomeProgression[gameState.roomCounter] || 'outdoor';
           parsedScene.characterSprite = gameState.selectedCharacter?.spriteUrl;
           parsedScene.enemySprite = interactingObject?.spriteUrl;
           parsedScene.biome = biomeKey;

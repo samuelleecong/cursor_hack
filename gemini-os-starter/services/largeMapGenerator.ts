@@ -476,10 +476,10 @@ export function generateLargeMap(
  */
 export function generateAllMaps(seed: number): LargeMap[] {
   const maps: LargeMap[] = [
-    generateLargeMap('map_1', 'Mystic Forest', 'forest', 1, seed),
-    generateLargeMap('map_2', 'Scorched Plains', 'desert', 2, seed + 10000),
-    generateLargeMap('map_3', 'Shadow Caverns', 'cave', 3, seed + 20000),
-    generateLargeMap('map_4', 'Ancient Ruins', 'dungeon', 4, seed + 30000),
+    generateLargeMap('map_1', 'Area One', 'outdoor', 1, seed),
+    generateLargeMap('map_2', 'Area Two', 'facility', 2, seed + 10000),
+    generateLargeMap('map_3', 'Area Three', 'indoor', 3, seed + 20000),
+    generateLargeMap('map_4', 'Area Four', 'arena', 4, seed + 30000),
   ];
 
   console.log('=== ALL MAPS GENERATED ===');

@@ -8,7 +8,7 @@ import { BiomeDefinition } from '../types/biomes';
 
 export type TileType = string; // Now dynamic based on biome definition
 
-export type BiomeType = 'forest' | 'dungeon' | 'plains' | 'desert' | 'cave'; // Legacy, kept for backwards compatibility
+export type BiomeType = string; // Dynamic biome names - can be any location name from story context or biomes.json
 
 export interface Tile {
   type: TileType;
@@ -222,12 +222,12 @@ export function generateTileMap(
   const tileSize = 40;
 
   // Determine biome
-  let biome: BiomeType = biomeType || 'forest';
+  let biome: BiomeType = biomeType || 'outdoor';
   if (!biomeType && !biomeDefinition) {
-    if (roomNumber < 3) biome = 'forest';
-    else if (roomNumber < 6) biome = 'plains';
-    else if (roomNumber < 10) biome = 'desert';
-    else biome = 'dungeon';
+    if (roomNumber < 5) biome = 'outdoor';
+    else if (roomNumber < 10) biome = 'facility';
+    else if (roomNumber < 15) biome = 'indoor';
+    else biome = 'arena';
   }
 
   // Set biome-specific tiles
@@ -288,6 +288,15 @@ export function generateTileMap(
         baseColor = '#78716c';
         pathColor = '#d6d3d1';
         obstacleColors = ['#57534e', '#a1a1aa'];
+        break;
+      default:
+        // Generic fallback for any biome not explicitly defined
+        baseTile = 'ground';
+        pathTile = 'path';
+        obstacleTiles = ['object', 'barrier'];
+        baseColor = '#84cc16';
+        pathColor = '#a8a29e';
+        obstacleColors = ['#71717a', '#a1a1aa'];
         break;
     }
   }
